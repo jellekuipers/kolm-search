@@ -9,7 +9,7 @@
 
 ## Overview
 
-`kolm-search` is a TypeScript library for building search pipelines with Retrieval-Augmented Generation (RAG) capabilities. It orchestrates the full retrieval lifecycle — query planning, embedding, retrieval, deduplication, reranking, and synthesis — through a clean set of port interfaces you implement against your own data sources.
+`kolm-search` is a TypeScript library for building production-grade search pipelines with Retrieval-Augmented Generation (RAG) capabilities. It orchestrates the full retrieval lifecycle — query planning, embedding, retrieval, deduplication, reranking, and synthesis — through a clean set of port interfaces you implement against your own data sources.
 
 **Key principles:**
 
@@ -125,6 +125,36 @@ const client = createPostgresSearchClient({ fulltextRetriever });
 ```
 
 Works with any PostgreSQL driver (Prisma, Drizzle, `pg`, `postgres.js`). Add `vectorRetriever` and `embedder` for hybrid search.
+
+---
+
+## Pipeline Options
+
+All presets accept `SearchPipelineOptions` to configure pipeline-level behaviour:
+
+```ts
+import { createBasicSearchClient } from "kolm-search/presets/basic";
+
+const client = createBasicSearchClient(documents, {
+  defaultLimit: 20,
+  defaultMode: "fulltext",
+  cacheTtlSeconds: 120,
+  maxQueryLength: 1000,
+  logger: console,
+});
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `defaultLimit` | `number` | `10` | Default result limit when not specified on a request |
+| `defaultMode` | `SearchMode` | `"hybrid"` | Default search mode when not specified on a request |
+| `cacheTtlSeconds` | `number` | `60` | TTL in seconds for cached responses |
+| `logger` | `Logger` | — | Structured logger (`debug`, `info`, `warn`, `error` methods) for pipeline diagnostics. Any `console`-like object works |
+| `inputSchema` | `StandardSchemaV1` | — | Standard Schema validator for incoming `SearchRequest` |
+| `outputSchema` | `StandardSchemaV1` | — | Standard Schema validator for outgoing `SearchResponse` |
+| `maxQueryLength` | `number` | No limit | Max query length in characters. Exceeding throws `SearchError` with `stage: "client"` |
+
+Preset-specific options (e.g. `CloudflarePresetOptions`, `PostgresPresetOptions`) extend `SearchPipelineOptions` with additional fields — see preset docs.
 
 ---
 
@@ -482,3 +512,4 @@ Contributions are welcome. Please open an issue before submitting a pull request
 ## License
 
 [MIT](LICENSE) © Jelle Kuipers
+
