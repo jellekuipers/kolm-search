@@ -1,7 +1,7 @@
 {
 	"name": "kolm-search",
 	"type": "module",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Modular, adapter-driven RAG search pipeline library — BYO database, no vendor lock-in.",
 	"author": "Jelle Kuipers <info@jellekuipers.com>",
 	"license": "MIT",
