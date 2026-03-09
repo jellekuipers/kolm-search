@@ -9,7 +9,7 @@
 
 ## Overview
 
-`kolm-search` is a TypeScript library for building production-grade search pipelines with Retrieval-Augmented Generation (RAG) capabilities. It orchestrates the full retrieval lifecycle — query planning, embedding, retrieval, deduplication, reranking, and synthesis — through a clean set of port interfaces you implement against your own data sources.
+`kolm-search` is a TypeScript library for composing search pipelines with Retrieval-Augmented Generation (RAG) capabilities. It orchestrates the full retrieval lifecycle — query planning, embedding, retrieval, deduplication, reranking, and synthesis — through a clean set of port interfaces you implement against your own data sources.
 
 **Key principles:**
 
@@ -20,7 +20,7 @@
 
 ## Features
 
-- Hybrid search (fulltext + vector) with [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf) (Cormack et al. 2009)
+- Hybrid search (fulltext + vector) with Reciprocal Rank Fusion
 - Multi-query expansion with configurable primary-query boost
 - Parallel retrieval via `CompositeRetriever` with fail-fast or best-effort strategies
 - Response caching with per-request TTLs
