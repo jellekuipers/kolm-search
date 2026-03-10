@@ -31,7 +31,7 @@ export interface CloudflarePresetEnv {
 			matches: Array<{
 				id: string;
 				score?: number;
-				metadata?: Record<string, unknown>;
+				metadata?: Record<string, NonNullable<unknown>>;
 			}>;
 		}>;
 	};

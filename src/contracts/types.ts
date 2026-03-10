@@ -23,7 +23,7 @@ export interface SearchDocument {
 	content: string;
 	source?: string;
 	tags?: string[];
-	metadata?: Record<string, unknown>;
+	metadata?: Record<string, NonNullable<unknown>>;
 	score?: number;
 }
 
@@ -66,7 +66,7 @@ export interface QueryPlan {
 	intent?: string;
 	mode: SearchMode;
 	targetLimit: number;
-	metadata?: Record<string, unknown>;
+	metadata?: Record<string, NonNullable<unknown>>;
 }
 
 /**

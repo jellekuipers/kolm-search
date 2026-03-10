@@ -8,7 +8,7 @@ import type {
 interface VectorizeMatch {
 	id: string;
 	score?: number;
-	metadata?: Record<string, unknown>;
+	metadata?: Record<string, NonNullable<unknown>>;
 }
 
 interface VectorizeQueryResult {
