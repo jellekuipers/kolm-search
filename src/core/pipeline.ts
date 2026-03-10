@@ -103,7 +103,7 @@ export class SearchPipeline {
 					...cached,
 					durationMs: Date.now() - startedAt,
 					metadata: {
-						...(cached.metadata ?? {}),
+						...(cached.metadata ?? { resultCount: 0 }),
 						cacheHit: true,
 					},
 				};

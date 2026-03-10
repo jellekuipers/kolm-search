@@ -90,6 +90,18 @@ export interface SearchPagination {
 }
 
 /**
+ * Metadata attached to a {@link SearchResponse}.
+ *
+ * Contains library-owned observability fields (`resultCount`, `cacheHit`).
+ */
+export interface SearchResponseMetadata {
+	/** Number of documents in the final result set after pagination. */
+	resultCount: number;
+	/** `true` when the response was served from the pipeline cache. */
+	cacheHit?: boolean;
+}
+
+/**
  * The value returned by {@link SearchClient.search}.
  *
  * Contains the final ranked result list, pagination metadata, the resolved
@@ -109,7 +121,7 @@ export interface SearchResponse {
 	/** Total wall-clock time for the full pipeline run, in milliseconds. */
 	durationMs: number;
 	/** Optional metadata emitted by pipeline stages for observability. */
-	metadata?: Record<string, unknown>;
+	metadata?: SearchResponseMetadata;
 }
 
 /**

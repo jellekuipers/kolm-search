@@ -13,6 +13,7 @@ import type {
 	SearchPipelineOptions,
 	SearchRequest,
 	SearchResponse,
+	SearchResponseMetadata,
 } from "../../src/contracts/types";
 import { SchemaValidationError, SearchError } from "../../src/contracts/types";
 
@@ -125,6 +126,12 @@ describe("SearchResponse types", () => {
 		expectTypeOf<SearchResponse>()
 			.toHaveProperty("answer")
 			.toEqualTypeOf<string | undefined>();
+	});
+
+	it("has optional SearchResponseMetadata", () => {
+		expectTypeOf<SearchResponse>()
+			.toHaveProperty("metadata")
+			.toEqualTypeOf<SearchResponseMetadata | undefined>();
 	});
 });
 
