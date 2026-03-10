@@ -35,7 +35,7 @@ describe("CompositeRetriever – all-fail best-effort path", () => {
 		await expect(composite.retrieve(baseContext())).rejects.toSatisfy(
 			(err: unknown) =>
 				err instanceof SearchError &&
-				err.stage === "retriever" &&
+				err.stage === "composite-retriever" &&
 				err.message.toLowerCase().includes("all retrievers failed"),
 		);
 	});

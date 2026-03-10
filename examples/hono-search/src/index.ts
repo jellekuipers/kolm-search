@@ -16,6 +16,7 @@
  */
 
 import { serve } from "@hono/node-server";
+import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import type { SearchDocument } from "kolm-search";
 import { createBasicSearchClient } from "kolm-search/presets/basic";
@@ -127,24 +128,8 @@ const app = new Hono();
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-app.post("/search", async (c) => {
-	// Parse and validate the request body.
-	let body: unknown;
-	try {
-		body = await c.req.json();
-	} catch {
-		return c.json({ error: "Request body must be valid JSON." }, 400);
-	}
-
-	const parsed = searchBodySchema.safeParse(body);
-	if (!parsed.success) {
-		return c.json(
-			{ error: "Invalid request.", issues: parsed.error.issues },
-			400,
-		);
-	}
-
-	const { query, limit } = parsed.data;
+app.post("/search", zValidator("json", searchBodySchema), async (c) => {
+	const { query, limit } = c.req.valid("json");
 
 	try {
 		const response = await client.search({ query, limit });
