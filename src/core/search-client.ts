@@ -31,13 +31,13 @@ async function validateSchema<T>(
  * Construct via a preset (`createBasicSearchClient`,
  * `createCloudflareSearchClient`, etc.) rather than instantiating directly.
  */
-export class SearchClient {
+export class SearchClient<TRequest extends SearchRequest = SearchRequest> {
 	private readonly pipeline: SearchPipeline;
-	private readonly options: SearchPipelineOptions;
+	private readonly options: SearchPipelineOptions<TRequest>;
 
 	constructor(
 		modules: SearchPipelineModules,
-		options: SearchPipelineOptions = {},
+		options: SearchPipelineOptions<TRequest> = {},
 	) {
 		this.pipeline = new SearchPipeline(modules, options);
 		this.options = options;
@@ -54,7 +54,7 @@ export class SearchClient {
 	 * @throws {@link SchemaValidationError} When `inputSchema` or `outputSchema` is
 	 *   configured and validation fails.
 	 */
-	public async search(request: SearchRequest): Promise<SearchResponse> {
+	public async search(request: TRequest): Promise<SearchResponse> {
 		if (!request.query || request.query.trim() === "") {
 			throw new SearchError(
 				"[client] Search query must not be empty.",

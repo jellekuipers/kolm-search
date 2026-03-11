@@ -111,8 +111,8 @@ The `context` parameter passed to `search` provides useful read-only fields:
 
 | Field | Use |
 | --- | --- |
-| `context.request.filters` | Scope the query by tenant, category, date range, etc. |
-| `context.request.context` | Access caller-supplied context (user ID, session info) |
+| `context.request.filters` | Scope the query by tenant, category, date range, etc. (`Record<string, JsonValue>`) |
+| `context.request.context` | Access caller-supplied context (user ID, session info) (`Record<string, JsonValue>`) |
 | `context.plan.intent` | Branch query logic based on classified intent |
 | `context.plan.targetLimit` | Use as the retrieval limit before pagination |
 

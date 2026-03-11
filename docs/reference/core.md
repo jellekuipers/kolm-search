@@ -26,7 +26,7 @@ Public API wrapper with input guards, validation, and sensible defaults.
 Primary method:
 
 ```ts
-search(request: SearchRequest): Promise<SearchResponse>
+search<TRequest extends SearchRequest>(request: TRequest): Promise<SearchResponse>
 ```
 
 Guards:
@@ -34,7 +34,7 @@ Guards:
 - Rejects queries exceeding `maxQueryLength` with `SearchError` (`stage: "client"`)
 - Validates request against `inputSchema` and response against `outputSchema` when configured — throws `SchemaValidationError` on failure
 
-Use this as the default integration surface. Prefer constructing via preset factories.
+The request type supports `filters?: Record<string, JsonValue>` and `context?: Record<string, JsonValue>`. Use this as the default integration surface. Prefer constructing via preset factories.
 
 ## `SearchPipeline`
 

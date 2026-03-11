@@ -79,8 +79,8 @@ Controls which retrieval strategy the pipeline uses. Default: `"hybrid"`.
 | `limit` | `number` | `defaultLimit` (10) | Maximum number of documents to return |
 | `offset` | `number` | `0` | Zero-based offset for pagination |
 | `mode` | `SearchMode` | `defaultMode` ("hybrid") | Retrieval strategy |
-| `filters` | `Record<string, unknown>` | `{}` | Arbitrary key/value filters forwarded to the retriever |
-| `context` | `Record<string, unknown>` | `{}` | Caller-supplied context forwarded through the pipeline unchanged |
+| `filters` | `Record<string, JsonValue>` | `{}` | Arbitrary key/value filters forwarded to the retriever |
+| `context` | `Record<string, JsonValue>` | `{}` | Caller-supplied context forwarded through the pipeline unchanged |
 
 ### `QueryPlan`
 

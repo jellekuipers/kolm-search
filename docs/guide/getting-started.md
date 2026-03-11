@@ -72,10 +72,12 @@ await client.search({
 | `limit` | `number` | `10` | Maximum number of results to return |
 | `offset` | `number` | `0` | Zero-based offset for pagination |
 | `mode` | `SearchMode` | `"hybrid"` | Retrieval strategy |
-| `filters` | `Record<string, unknown>` | `{}` | Key/value filters forwarded to the retriever |
-| `context` | `Record<string, unknown>` | `{}` | Caller-supplied context forwarded through the pipeline unchanged |
+| `filters` | `Record<string, JsonValue>` | `{}` | Key/value filters forwarded to the retriever |
+| `context` | `Record<string, JsonValue>` | `{}` | Caller-supplied context forwarded through the pipeline unchanged |
 
 `filters` are passed to your retriever's `context.request.filters` — use them to scope queries by tenant, category, date range, or any backend-specific dimension. `context` is similar but intended for non-filter data (e.g. user ID, session info) that downstream modules may use.
+
+> **Note:** The `search()` method is generic: `search<TRequest>(request: TRequest): Promise<SearchResponse>`. This allows custom request types and schema validation.
 
 ## Building a Custom Client
 

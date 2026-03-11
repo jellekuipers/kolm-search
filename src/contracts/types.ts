@@ -55,10 +55,10 @@ export interface SearchRequest {
 	offset?: number;
 	/** Retrieval strategy. Defaults to {@link SearchPipelineOptions.defaultMode}. */
 	mode?: SearchMode;
-	/** Arbitrary key/value filters forwarded to the retriever. */
-	filters?: Record<string, unknown>;
-	/** Caller-supplied context forwarded through the pipeline unchanged. */
-	context?: Record<string, unknown>;
+	/** Arbitrary key/value filters forwarded to the retriever. Must be JSON-serializable. */
+	filters?: Record<string, JsonValue>;
+	/** Caller-supplied context forwarded through the pipeline unchanged. Must be JSON-serializable. */
+	context?: Record<string, JsonValue>;
 }
 
 export interface QueryPlan {
@@ -250,7 +250,7 @@ export interface Logger {
 	error(message: string, payload?: unknown): void;
 }
 
-export interface SearchPipelineOptions {
+export interface SearchPipelineOptions<TRequest extends SearchRequest = SearchRequest> {
 	/** Default result limit when not specified on a request. Default: `10`. */
 	defaultLimit?: number;
 	/** Default search mode when not specified on a request. Default: `"hybrid"`. */
@@ -265,7 +265,7 @@ export interface SearchPipelineOptions {
 	 * library that implements the Standard Schema spec (Zod, Valibot, ArkType, …).
 	 * Throws {@link SchemaValidationError} on failure.
 	 */
-	inputSchema?: StandardSchemaV1<unknown, SearchRequest>;
+	inputSchema?: StandardSchemaV1<unknown, TRequest>;
 	/**
 	 * Optional Standard Schema-compatible schema to validate the {@link SearchResponse}
 	 * produced by the pipeline. Throws {@link SchemaValidationError} on failure.

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Fix additional context and filter values to JSON value
+
+## [0.1.7] - 2026-03-11
+
+### Changed
+
 - Fix metadatatype to JSON value
 
 ## [0.1.6] - 2026-03-11
