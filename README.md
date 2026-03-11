@@ -19,10 +19,32 @@ It is designed as a headless search engine, providing the orchestration logic—
 
 ---
 
+## Documentation
+
+- [Guide: Getting Started & Concepts](docs/guide/getting-started.md)
+- [Guide: Architecture](docs/guide/architecture.md)
+- [Guide: Presets](docs/guide/presets.md)
+- [Reference: Core API](docs/reference/core.md)
+- [Reference: Adapters](docs/reference/adapters.md)
+- [Reference: Contracts](docs/reference/contracts.md)
+- [Reference: Errors](docs/reference/errors.md)
+
+---
+
 ## Installation
 
 ```bash
+# pnpm
 pnpm add kolm-search
+
+# npm
+npm install kolm-search
+
+# yarn
+yarn add kolm-search
+
+# bun
+bun add kolm-search
 ```
 
 ---
@@ -62,10 +84,13 @@ export default {
 `kolm-search` is adapter-driven. You can mix and match providers for different stages of the lifecycle by implementing simple interfaces.
 
 ```typescript
-import { SearchClient } from "kolm-search";
+import { SearchClient, DefaultQueryPlanner } from "kolm-search";
 import { createFulltextRetriever } from "kolm-search/adapters/generic";
 
 const client = new SearchClient({
+  // Required: normalize and plan queries
+  planner: new DefaultQueryPlanner(),
+
   // 1. Convert text to vector
   embedder: {
     async embed(text) {
@@ -84,11 +109,11 @@ const client = new SearchClient({
 
   // 3. (Optional) Synthesize an LLM answer
   synthesizer: {
-    async synthesize({ plan, results }) {
-      const context = results.map(r => r.content).join("\n");
+    async synthesize(context) {
+      const text = context.results.map(r => r.content).join("\n");
       const res = await openai.chat.completions.create({
         model: "gpt-4o",
-        messages: [{ role: "system", content: `Context: ${context}` }, { role: "user", content: plan.normalizedQuery }]
+        messages: [{ role: "system", content: `Context: ${text}` }, { role: "user", content: context.plan.normalizedQuery }]
       });
       return res.choices[0].message.content;
     }
@@ -114,7 +139,7 @@ const client = new SearchClient({
 `kolm-search` follows a modular port-and-adapter architecture. You provide the **adapters** (how to talk to your DB/LLM), and the library handles the **pipeline** (the logic of how a search should run).
 
 ```text
-Request ──▶ [ SearchClient ] ──▶ [ QueryPlanner ] ──▶ [ IntentClassifier ]
+Request ──▶ [ Cache (hit?) ] ──▶ [ QueryPlanner ] ──▶ [ IntentClassifier ]
                                                               │
     ┌─────────────────────────────────────────────────────────┘
     ▼
@@ -122,7 +147,7 @@ Request ──▶ [ SearchClient ] ──▶ [ QueryPlanner ] ──▶ [ Intent
                                                               │
     ┌─────────────────────────────────────────────────────────┘
     ▼
-[ Reranker ] ──▶ [ Pagination ] ──▶ [ Synthesizer (LLM) ] ──▶ SearchResponse
+[ Reranker ] ──▶ [ Pagination ] ──▶ [ Synthesizer (LLM) ] ──▶ [ Cache (set) ] ──▶ SearchResponse
 ```
 
 ---
@@ -130,16 +155,25 @@ Request ──▶ [ SearchClient ] ──▶ [ QueryPlanner ] ──▶ [ Intent
 ## Advanced Configuration
 
 ### Error Handling
-Identify exactly which stage of the RAG pipeline failed using `PIPELINE_STAGES` constants.
+
+Two error types are thrown by the pipeline:
+
+- **`SearchError`** — a named pipeline stage failed (query validation, retrieval, embedding, etc.)
+- **`SchemaValidationError`** — input or output failed Standard Schema validation
+
+Identify exactly which stage failed using the `PIPELINE_STAGES` constants:
 
 ```typescript
-import { SearchError, PIPELINE_STAGES } from "kolm-search";
+import { SearchError, SchemaValidationError, PIPELINE_STAGES } from "kolm-search";
 
 try {
   await client.search({ query: "..." });
 } catch (error) {
   if (error instanceof SearchError && error.stage === PIPELINE_STAGES.EMBEDDER) {
     console.error("The LLM embedding service is down.");
+  }
+  if (error instanceof SchemaValidationError) {
+    console.error("Validation failed on", error.target, error.issues);
   }
 }
 ```
@@ -150,8 +184,10 @@ Monitor your search performance with millisecond precision per-stage.
 ```typescript
 const telemetry: Telemetry = {
   async track(event, payload) {
-    // payload.stageDurations = { planner: 5, retriever: 42, reranker: 12, ... }
-    console.log(`Search completed in ${payload.durationMs}ms`);
+    // event is always "search.completed"
+    // payload shape: { durationMs: number, mode: SearchMode, resultCount: number, stageDurations: Record<string, number> }
+    // stageDurations keys: "planner", "embedder", "retriever", "reranker", "synthesizer", "cache.get", "cache.set"
+    console.log(`Search completed in ${payload.durationMs}ms`, payload.stageDurations);
   },
 };
 ```
