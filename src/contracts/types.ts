@@ -1,6 +1,19 @@
 import type { StandardSchemaV1 } from "./standard-schema";
 
 /**
+ * Any value that can be round-tripped through JSON serialization.
+ * Use this as the metadata value type when the consumer requires
+ * serializable data (e.g. TanStack Start loaders, server functions, HTTP APIs).
+ */
+export type JsonValue =
+	| string
+	| number
+	| boolean
+	| null
+	| JsonValue[]
+	| { [key: string]: JsonValue };
+
+/**
  * Controls which retrieval strategy the pipeline uses.
  *
  * - `"fulltext"` — keyword-based search only.
@@ -23,7 +36,7 @@ export interface SearchDocument {
 	content: string;
 	source?: string;
 	tags?: string[];
-	metadata?: Record<string, NonNullable<unknown>>;
+	metadata?: Record<string, JsonValue>;
 	score?: number;
 }
 
@@ -66,7 +79,7 @@ export interface QueryPlan {
 	intent?: string;
 	mode: SearchMode;
 	targetLimit: number;
-	metadata?: Record<string, NonNullable<unknown>>;
+	metadata?: Record<string, JsonValue>;
 }
 
 /**

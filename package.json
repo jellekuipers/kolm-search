@@ -1,72 +1,72 @@
 {
-  "name": "kolm-search",
-  "type": "module",
-  "version": "0.1.6",
-  "description": "Headless RAG search orchestration for your existing stack. Build production-grade search pipelines using your own databases and LLM providers. Zero vendor lock-in, edge-ready, and fully type-safe.",
-  "author": "Jelle Kuipers <info@jellekuipers.com>",
-  "license": "MIT",
-  "homepage": "https://github.com/jellekuipers/kolm-search#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jellekuipers/kolm-search.git"
-  },
-  "bugs": {
-    "url": "https://github.com/jellekuipers/kolm-search/issues"
-  },
-  "keywords": [
-    "rag",
-    "search",
-    "hybrid-search",
-    "vector-search",
-    "fulltext-search",
-    "retrieval-augmented-generation",
-    "cloudflare-workers",
-    "postgresql",
-    "typescript",
-    "rrf",
-    "pipeline"
-  ],
-  "exports": {
-    ".": "./dist/index.mjs",
-    "./adapters/cloudflare": "./dist/adapters/cloudflare/index.mjs",
-    "./adapters/generic": "./dist/adapters/generic.mjs",
-    "./adapters/in-memory": "./dist/adapters/in-memory.mjs",
-    "./adapters/redis": "./dist/adapters/redis.mjs",
-    "./presets/basic": "./dist/presets/basic.mjs",
-    "./presets/cloudflare": "./dist/presets/cloudflare.mjs",
-    "./presets/postgres": "./dist/presets/postgres.mjs",
-    "./package.json": "./package.json"
-  },
-  "types": "./dist/index.d.mts",
-  "files": [
-    "dist",
-    "LICENSE",
-    "CHANGELOG.md"
-  ],
-  "scripts": {
-    "build": "tsdown",
-    "check": "biome check --write .",
-    "check-types": "tsc --noEmit && pnpm -r --parallel run check-types",
-    "dev": "tsdown --watch",
-    "dev:hono": "pnpm --filter hono-search-example dev",
-    "format": "biome format --write .",
-    "knip": "knip",
-    "lint": "biome lint .",
-    "prepublishOnly": "pnpm run build",
-    "test": "vitest",
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.6",
-    "@types/node": "^25.4.0",
-    "@vitest/coverage-v8": "^4.0.18",
-    "bumpp": "^10.4.1",
-    "knip": "^5.86.0",
-    "tsdown": "^0.21.1",
-    "typescript": "^5.9.3",
-    "vitepress": "2.0.0-alpha.16",
-    "vitest": "^4.0.18"
-  }
+	"name": "kolm-search",
+	"type": "module",
+	"version": "0.1.6",
+	"description": "Headless RAG search orchestration for your existing stack. Build production-grade search pipelines using your own databases and LLM providers. Zero vendor lock-in, edge-ready, and fully type-safe.",
+	"author": "Jelle Kuipers <info@jellekuipers.com>",
+	"license": "MIT",
+	"homepage": "https://github.com/jellekuipers/kolm-search#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/jellekuipers/kolm-search.git"
+	},
+	"bugs": {
+		"url": "https://github.com/jellekuipers/kolm-search/issues"
+	},
+	"keywords": [
+		"rag",
+		"search",
+		"hybrid-search",
+		"vector-search",
+		"fulltext-search",
+		"retrieval-augmented-generation",
+		"cloudflare-workers",
+		"postgresql",
+		"typescript",
+		"rrf",
+		"pipeline"
+	],
+	"exports": {
+		".": "./dist/index.mjs",
+		"./adapters/cloudflare": "./dist/adapters/cloudflare/index.mjs",
+		"./adapters/generic": "./dist/adapters/generic.mjs",
+		"./adapters/in-memory": "./dist/adapters/in-memory.mjs",
+		"./adapters/redis": "./dist/adapters/redis.mjs",
+		"./presets/basic": "./dist/presets/basic.mjs",
+		"./presets/cloudflare": "./dist/presets/cloudflare.mjs",
+		"./presets/postgres": "./dist/presets/postgres.mjs",
+		"./package.json": "./package.json"
+	},
+	"types": "./dist/index.d.mts",
+	"files": [
+		"dist",
+		"LICENSE",
+		"CHANGELOG.md"
+	],
+	"scripts": {
+		"build": "tsdown",
+		"check": "biome check --write .",
+		"check-types": "tsc --noEmit && pnpm -r --parallel run check-types",
+		"dev": "tsdown --watch",
+		"dev:hono": "pnpm --filter hono-search-example dev",
+		"format": "biome format --write .",
+		"knip": "knip",
+		"lint": "biome lint .",
+		"prepublishOnly": "pnpm run build",
+		"test": "vitest",
+		"docs:dev": "vitepress dev docs",
+		"docs:build": "vitepress build docs",
+		"docs:preview": "vitepress preview docs"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.6",
+		"@types/node": "^25.4.0",
+		"@vitest/coverage-v8": "^4.0.18",
+		"bumpp": "^10.4.1",
+		"knip": "^5.86.0",
+		"tsdown": "^0.21.1",
+		"typescript": "^5.9.3",
+		"vitepress": "2.0.0-alpha.16",
+		"vitest": "^4.0.18"
+	}
 }
