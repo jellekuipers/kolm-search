@@ -1,5 +1,6 @@
 import type { Retriever } from "../../contracts/ports";
 import type {
+	JsonValue,
 	SearchDocument,
 	SearchPipelineContext,
 } from "../../contracts/types";
@@ -8,7 +9,7 @@ import type {
 interface VectorizeMatch {
 	id: string;
 	score?: number;
-	metadata?: Record<string, NonNullable<unknown>>;
+	metadata?: Record<string, JsonValue>;
 }
 
 interface VectorizeQueryResult {
