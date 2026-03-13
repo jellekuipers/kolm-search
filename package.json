@@ -1,7 +1,7 @@
 {
 	"name": "kolm-search",
 	"type": "module",
-	"version": "0.1.8",
+	"version": "1.0.0",
 	"description": "Headless RAG search orchestration for your existing stack. Build production-grade search pipelines using your own databases and LLM providers. Zero vendor lock-in, edge-ready, and fully type-safe.",
 	"author": "Jelle Kuipers <info@jellekuipers.com>",
 	"license": "MIT",
