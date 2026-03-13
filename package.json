@@ -49,6 +49,7 @@
 		"check-types": "tsc --noEmit && pnpm -r --parallel run check-types",
 		"dev": "tsdown --watch",
 		"dev:hono": "pnpm --filter hono-search-example dev",
+		"dev:tanstack-start": "pnpm --filter tanstack-start-search-example dev",
 		"format": "biome format --write .",
 		"knip": "knip",
 		"lint": "biome lint .",

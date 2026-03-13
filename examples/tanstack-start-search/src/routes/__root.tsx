@@ -1,70 +1,70 @@
-import { TanStackDevtools } from '@tanstack/react-devtools';
-import type { QueryClient } from '@tanstack/react-query';
+import { TanStackDevtools } from "@tanstack/react-devtools";
+import type { QueryClient } from "@tanstack/react-query";
 import {
-  createRootRouteWithContext,
-  HeadContent,
-  Scripts,
-} from '@tanstack/react-router';
-import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
+	createRootRouteWithContext,
+	HeadContent,
+	Scripts,
+} from "@tanstack/react-router";
+import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 
-import TanStackQueryDevtools from '../integrations/tanstack-query/devtools';
-import TanStackQueryProvider from '../integrations/tanstack-query/root-provider';
+import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
+import TanStackQueryProvider from "../integrations/tanstack-query/root-provider";
 
-import appCss from '../styles.css?url';
+import appCss from "../styles.css?url";
 
 interface RouterContext {
-  queryClient: QueryClient;
+	queryClient: QueryClient;
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
-  head: () => ({
-    meta: [
-      {
-        charSet: 'utf-8',
-      },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      {
-        title: 'kolm-search',
-      },
-    ],
-    links: [
-      {
-        rel: 'stylesheet',
-        href: appCss,
-      },
-      { rel: 'icon', href: '/favicon.svg' },
-    ],
-  }),
-  shellComponent: RootDocument,
+	head: () => ({
+		meta: [
+			{
+				charSet: "utf-8",
+			},
+			{
+				name: "viewport",
+				content: "width=device-width, initial-scale=1",
+			},
+			{
+				title: "kolm-search",
+			},
+		],
+		links: [
+			{
+				rel: "stylesheet",
+				href: appCss,
+			},
+			{ rel: "icon", href: "/favicon.svg" },
+		],
+	}),
+	shellComponent: RootDocument,
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <HeadContent />
-      </head>
-      <body className="font-sans antialiased">
-        <TanStackQueryProvider>
-          {children}
-          <TanStackDevtools
-            config={{
-              position: 'bottom-right',
-            }}
-            plugins={[
-              {
-                name: 'Tanstack Router',
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-              TanStackQueryDevtools,
-            ]}
-          />
-        </TanStackQueryProvider>
-        <Scripts />
-      </body>
-    </html>
-  );
+	return (
+		<html lang="en" suppressHydrationWarning>
+			<head>
+				<HeadContent />
+			</head>
+			<body className="font-sans">
+				<TanStackQueryProvider>
+					{children}
+					<TanStackDevtools
+						config={{
+							position: "bottom-right",
+						}}
+						plugins={[
+							{
+								name: "Tanstack Router",
+								render: <TanStackRouterDevtoolsPanel />,
+							},
+							TanStackQueryDevtools,
+						]}
+					/>
+				</TanStackQueryProvider>
+				<Scripts />
+			</body>
+		</html>
+	);
 }
