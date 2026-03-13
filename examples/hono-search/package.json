@@ -12,12 +12,12 @@
 	"dependencies": {
 		"@hono/node-server": "^1.19.11",
 		"@hono/zod-validator": "^0.7.6",
-		"hono": "^4.12.6",
+		"hono": "^4.12.7",
 		"kolm-search": "workspace:*",
 		"zod": "^4.3.6"
 	},
 	"devDependencies": {
-		"@types/node": "^25.4.0",
+		"@types/node": "^25.5.0",
 		"tsx": "^4.21.0",
 		"typescript": "^5.9.3"
 	}

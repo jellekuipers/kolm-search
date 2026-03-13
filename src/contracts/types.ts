@@ -250,7 +250,9 @@ export interface Logger {
 	error(message: string, payload?: unknown): void;
 }
 
-export interface SearchPipelineOptions<TRequest extends SearchRequest = SearchRequest> {
+export interface SearchPipelineOptions<
+	TRequest extends SearchRequest = SearchRequest,
+> {
 	/** Default result limit when not specified on a request. Default: `10`. */
 	defaultLimit?: number;
 	/** Default search mode when not specified on a request. Default: `"hybrid"`. */
