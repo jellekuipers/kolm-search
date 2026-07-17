@@ -145,6 +145,16 @@ export interface VectorRetrieverOptions<TRow> {
 	 * @param row - A single row returned by {@link VectorRetrieverOptions.search}.
 	 */
 	toDocument(row: TRow): SearchDocument;
+	/**
+	 * How many times the primary query's ranked list is counted in the RRF
+	 * merge relative to every expanded variant, when the pipeline provides
+	 * multiple query embeddings (`context.expandedEmbeddings`).
+	 *
+	 * Defaults to `1` (all queries carry equal weight). Set to `2` to give the
+	 * primary query double the RRF signal — mirrors
+	 * {@link FulltextRetrieverOptions.primaryQueryBoost}.
+	 */
+	primaryQueryBoost?: number;
 }
 
 /**
@@ -187,8 +197,37 @@ export const createVectorRetriever = <TRow>(
 				"retriever",
 			);
 		}
+		const vectors =
+			context.expandedEmbeddings && context.expandedEmbeddings.length > 0
+				? context.expandedEmbeddings
+				: [context.embeddings];
 		const limit = context.plan.targetLimit * 2;
-		const rows = await options.search(context.embeddings, limit, context);
-		return rows.map(options.toDocument);
+
+		// Single-vector fast path — no RRF overhead needed
+		if (vectors.length === 1) {
+			const rows = await options.search(vectors[0] as number[], limit, context);
+			return rows.map(options.toDocument);
+		}
+
+		// Fan out to one ANN call per expanded-query embedding, then RRF-merge
+		const rankedLists = await Promise.all(
+			vectors.map(async (vector) => {
+				const rows = await options.search(vector, limit, context);
+				return rows.map(options.toDocument);
+			}),
+		);
+
+		const boost = options.primaryQueryBoost ?? 1;
+		const [primaryList] = rankedLists;
+		const mergeInput =
+			boost > 1 && primaryList !== undefined
+				? [
+						...Array.from({ length: boost - 1 }, () => primaryList),
+						...rankedLists,
+					]
+				: rankedLists;
+
+		const docMap = new Map<string, SearchDocument>();
+		return mergeWithRrf(mergeInput, docMap, limit);
 	},
 });

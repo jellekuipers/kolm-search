@@ -88,7 +88,8 @@ import { SearchClient, DefaultQueryPlanner } from "kolm-search";
 import { createFulltextRetriever } from "kolm-search/adapters/generic";
 
 const client = new SearchClient({
-  // Required: normalize and plan queries
+  // Required: normalize and plan queries.
+  // Swap in ExpandingQueryPlanner for multi-query expansion (see below).
   planner: new DefaultQueryPlanner(),
 
   // 1. Convert text to vector
@@ -121,12 +122,37 @@ const client = new SearchClient({
 });
 ```
 
+### Multi-Query Expansion
+
+Swap the planner for `ExpandingQueryPlanner` to rewrite each search into multiple phrasings. Every built-in retriever fans out across the expanded queries — fulltext retrievers run one search per query, vector retrievers run one ANN search per query embedding — and the ranked lists are fused with RRF:
+
+```typescript
+import { ExpandingQueryPlanner, SearchClient } from "kolm-search";
+
+const client = new SearchClient({
+  planner: new ExpandingQueryPlanner({
+    async expand(query) {
+      // Bring your own expansion source: an LLM, synonym service, rewrite table, …
+      const res = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: `Rewrite this search query into 3 alternative phrasings, one per line, no numbering:\n${query}` }],
+      });
+      return res.choices[0].message.content?.split("\n") ?? [];
+    },
+  }),
+  embedder,   // in vector/hybrid mode, every expanded query is embedded
+  retriever,
+});
+```
+
+Expander failures degrade gracefully to the primary query alone. On Cloudflare, pass `queryExpansion: true` to `createCloudflareSearchClient` to enable this with Workers AI.
+
 ---
 
 ## Features
 
 - **Hybrid Search:** Combine Fulltext (keyword) and Vector (semantic) search with [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf) for superior relevance.
-- **Smart Query Planning:** Multi-query expansion and intent classification to understand what users *actually* want.
+- **Smart Query Planning:** Multi-query expansion (via `ExpandingQueryPlanner`) and intent classification to understand what users *actually* want. Expanded queries flow through fulltext, vector, and hybrid retrieval alike.
 - **Production Orchestration:** Built-in parallel retrieval, response caching with TTLs, and deduplication.
 - **Framework Agnostic:** Runs anywhere (Node, Bun, Edge, Deno). No heavy dependencies.
 - **Observability:** Detailed stage-level telemetry (track duration and success per-stage).

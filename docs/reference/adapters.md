@@ -24,7 +24,7 @@ Fulltext retriever for development and testing. Scores documents by the fraction
 | --- | --- | --- |
 | `documents` | `SearchDocument[]` | Document corpus to search over |
 
-Returns up to `targetLimit × 2` candidates sorted by descending score. Throws `SearchError` when mode is `"vector"`.
+Returns up to `targetLimit × 2` candidates sorted by descending score. Throws `SearchError` when mode is `"vector"`. When `expandedQueries` has multiple entries, one ranked list is built per query and the lists are RRF-merged.
 
 ### `InMemoryVectorRetriever`
 
@@ -41,7 +41,7 @@ Vector retriever using cosine similarity. Requires an `Embedder` in the pipeline
 | `document` | `SearchDocument` | The document |
 | `embedding` | `number[]` | Pre-computed embedding vector |
 
-Returns up to `targetLimit × 2` candidates. Throws `SearchError` when `context.embeddings` is absent.
+Returns up to `targetLimit × 2` candidates. Throws `SearchError` when `context.embeddings` is absent. When `context.expandedEmbeddings` has multiple vectors, one ranked list is built per vector and the lists are RRF-merged.
 
 ### `InMemoryCache`
 
@@ -122,14 +122,17 @@ When `expandedQueries` has multiple entries, results from each query are merged 
 
 Creates a `Retriever` backed by any vector-capable database.
 
-| Option | Type | Required | Description |
-| --- | --- | --- | --- |
-| `search` | `(embeddings: number[], limit: number, context: SearchPipelineContext) => Promise<TRow[]>` | Yes | Execute a vector (ANN) search using query embeddings |
-| `toDocument` | `(row: TRow) => SearchDocument` | Yes | Map a raw database row to a `SearchDocument` |
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `search` | `(embeddings: number[], limit: number, context: SearchPipelineContext) => Promise<TRow[]>` | Yes | — | Execute a vector (ANN) search using query embeddings |
+| `toDocument` | `(row: TRow) => SearchDocument` | Yes | — | Map a raw database row to a `SearchDocument` |
+| `primaryQueryBoost` | `number` | No | `1` | How many times the primary query's ranked list is counted in the RRF merge relative to expanded variants, when multiple query embeddings are present |
 
 The same `context` fields described above are available in the `search` callback.
 
 Throws `SearchError` when `context.embeddings` is absent (no `Embedder` wired).
+
+When `context.expandedEmbeddings` has multiple vectors (multi-query expansion in vector/hybrid mode), `search` is called once per vector and the ranked lists are RRF-merged — mirroring `createFulltextRetriever`'s multi-query fan-out.
 
 ## Redis
 
@@ -172,6 +175,8 @@ Import path: `kolm-search/adapters/cloudflare`
 | `table` | `string` | Yes | Name of the FTS5 virtual table |
 | `toDocument` | `(row: TRow & { score: number }) => SearchDocument` | Yes | Map a D1 row to a `SearchDocument`. The `score` field is a positive BM25 value (the adapter negates D1's native negative `rank`) |
 
+When `expandedQueries` has multiple entries, one `MATCH` query is issued per expanded query (in parallel) and the ranked lists are RRF-merged.
+
 ### `VectorizeRetriever`
 
 `Retriever` backed by a Cloudflare Vectorize index.
@@ -180,7 +185,7 @@ Import path: `kolm-search/adapters/cloudflare`
 | --- | --- | --- |
 | `index` | Vectorize index binding | The Vectorize index from `env` |
 
-Requests `topK = max(targetLimit × 2, 20)` with `returnMetadata: true`. Metadata fields (`title`, `content`, `source`) are mapped to `SearchDocument` properties.
+Requests `topK = max(targetLimit × 2, 20)` with `returnMetadata: true`. Metadata fields (`title`, `content`, `source`) are mapped to `SearchDocument` properties. When `context.expandedEmbeddings` has multiple vectors, one Vectorize query is issued per vector (in parallel) and the match lists are RRF-merged.
 
 > **Silent empty list:** When `context.embeddings` is absent (no embedder wired, or fulltext-only mode), `VectorizeRetriever` returns an empty list rather than throwing. This is intentional: it allows safe composition in a `CompositeRetriever` alongside a fulltext retriever without failing fulltext-only requests.
 
@@ -192,6 +197,26 @@ Requests `topK = max(targetLimit × 2, 20)` with `returnMetadata: true`. Metadat
 | --- | --- | --- | --- |
 | `ai` | Workers AI binding | — | The AI binding from `env` |
 | `model` | `string` | `"@cf/baai/bge-base-en-v1.5"` | Workers AI embedding model (768 dimensions) |
+
+Implements `embedMany` — the Workers AI embedding endpoint accepts an array of texts natively, so all expanded queries are embedded in a single call.
+
+### `WorkersAIQueryExpander`
+
+`QueryExpander` backed by a Cloudflare Workers AI chat-completion model. Pair with `ExpandingQueryPlanner` (see [core reference](/reference/core#expandingqueryplanner)) to enable multi-query retrieval.
+
+| Constructor Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ai` | Workers AI binding | — | The AI binding from `env` |
+| `model` | `string` | `"@cf/meta/llama-3.1-8b-instruct"` | Workers AI chat model |
+| `options` | `WorkersAIQueryExpanderOptions` | `{}` | Additional options |
+
+`WorkersAIQueryExpanderOptions`:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maxExpansions` | `number` | `3` | Maximum number of alternative phrasings to request |
+
+The model is asked for newline-separated phrasings; output is parsed defensively (list markers and quotes stripped, empty lines dropped). Imperfect model output degrades to fewer expansions rather than failures.
 
 ### `WorkersAISynthesizer`
 

@@ -143,9 +143,31 @@ export class SearchPipeline {
 			(context.plan.mode === "vector" || context.plan.mode === "hybrid")
 		) {
 			const embedder = this.modules.embedder;
-			context.embeddings = await timedStage("embedder", () =>
-				embedder.embed(context.plan.normalizedQuery),
-			);
+			const queries =
+				context.plan.expandedQueries && context.plan.expandedQueries.length > 0
+					? context.plan.expandedQueries
+					: [context.plan.normalizedQuery];
+
+			if (queries.length === 1) {
+				context.embeddings = await timedStage("embedder", () =>
+					embedder.embed(queries[0] as string),
+				);
+			} else {
+				const expandedEmbeddings = await timedStage("embedder", async () => {
+					const vectors = embedder.embedMany
+						? await embedder.embedMany(queries)
+						: await Promise.all(queries.map((query) => embedder.embed(query)));
+					if (vectors.length !== queries.length) {
+						throw new SearchError(
+							`[embedder] Expected ${queries.length} embeddings but received ${vectors.length}.`,
+							"embedder",
+						);
+					}
+					return vectors;
+				});
+				context.expandedEmbeddings = expandedEmbeddings;
+				context.embeddings = expandedEmbeddings[0];
+			}
 		}
 
 		context.candidates = await timedStage("retriever", () =>

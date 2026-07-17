@@ -8,6 +8,7 @@ import {
   SearchPipeline,
   CompositeRetriever,
   DefaultQueryPlanner,
+  ExpandingQueryPlanner,
   PIPELINE_STAGES,
   rrfScore,
   mergeWithRrf,
@@ -77,7 +78,44 @@ Normalisation steps:
 2. Lowercase the entire string
 3. Collapse consecutive whitespace to a single space
 
-Sets `expandedQueries` to `[normalizedQuery]`. No synonym expansion, spell-checking, or term splitting — substitute a custom `QueryPlanner` for those features.
+Sets `expandedQueries` to `[normalizedQuery]`. No synonym expansion, spell-checking, or term splitting — use `ExpandingQueryPlanner` for multi-query expansion, or substitute a custom `QueryPlanner`.
+
+## `ExpandingQueryPlanner`
+
+`QueryPlanner` that performs multi-query expansion via an injected `QueryExpander` (see [contracts reference](/reference/contracts)). Every built-in retriever fans out across `expandedQueries` — one search per query (or per query embedding in vector/hybrid mode) — and merges the ranked lists with RRF.
+
+| Constructor Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `expander` | `QueryExpander` | Yes | Produces alternative phrasings of the normalised query |
+| `options` | `ExpandingQueryPlannerOptions` | No | Configuration options |
+
+`ExpandingQueryPlannerOptions`:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maxQueries` | `number` | `4` | Maximum total queries in `expandedQueries`, including the primary query at index 0 |
+| `logger` | `Logger` | `undefined` | Receives a warning when the expander fails |
+
+Behaviour:
+
+- The primary query is normalised like `DefaultQueryPlanner` and always kept at index 0.
+- Expansions are normalised the same way, deduplicated (against each other and the primary query), and capped at `maxQueries` total.
+- Expander failures and empty results degrade gracefully: the plan falls back to the primary query alone and a warning is logged — degraded relevance is preferred over a failed search.
+
+```ts
+import { ExpandingQueryPlanner, SearchClient } from "kolm-search";
+
+const planner = new ExpandingQueryPlanner({
+  async expand(query) {
+    // Call an LLM, synonym service, or rewrite table — your choice.
+    return llm.rewrite(query); // e.g. ["install kolm-search", "kolm-search setup"]
+  },
+});
+
+const client = new SearchClient({ planner, retriever, embedder });
+```
+
+In `"vector"` and `"hybrid"` mode the pipeline embeds every expanded query (using `Embedder.embedMany` when implemented, otherwise parallel `embed` calls) and exposes the vectors as `context.expandedEmbeddings` for vector retrievers.
 
 ## `PIPELINE_STAGES`
 

@@ -1,6 +1,8 @@
 import { assertType, describe, expectTypeOf, it } from "vitest";
 import type {
 	CacheStore,
+	Embedder,
+	QueryExpander,
 	SearchPipelineModules,
 } from "../../src/contracts/ports";
 import type { StandardSchemaV1 } from "../../src/contracts/standard-schema";
@@ -10,6 +12,7 @@ import type {
 	SchemaIssue,
 	SearchDocument,
 	SearchMode,
+	SearchPipelineContext,
 	SearchPipelineOptions,
 	SearchRequest,
 	SearchResponse,
@@ -240,5 +243,43 @@ describe("StandardSchemaV1 types", () => {
 	it("has ~standard property with validate function", () => {
 		type Schema = StandardSchemaV1<string, string>;
 		expectTypeOf<Schema>().toHaveProperty("~standard");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Query expansion
+// ---------------------------------------------------------------------------
+
+describe("QueryExpander types", () => {
+	it("expand takes a string and resolves to a string array", () => {
+		expectTypeOf<QueryExpander["expand"]>().toEqualTypeOf<
+			(query: string) => Promise<string[]>
+		>();
+	});
+});
+
+describe("Embedder types", () => {
+	it("embedMany is optional and batch-shaped", () => {
+		expectTypeOf<Embedder>()
+			.toHaveProperty("embedMany")
+			.toEqualTypeOf<((inputs: string[]) => Promise<number[][]>) | undefined>();
+
+		// An embedder without embedMany still satisfies the interface
+		assertType<Embedder>({
+			async embed() {
+				return [0];
+			},
+		});
+	});
+});
+
+describe("SearchPipelineContext embedding types", () => {
+	it("has optional embeddings and expandedEmbeddings", () => {
+		expectTypeOf<SearchPipelineContext>()
+			.toHaveProperty("embeddings")
+			.toEqualTypeOf<number[] | undefined>();
+		expectTypeOf<SearchPipelineContext>()
+			.toHaveProperty("expandedEmbeddings")
+			.toEqualTypeOf<number[][] | undefined>();
 	});
 });

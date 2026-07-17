@@ -774,3 +774,122 @@ describe("IntentClassifier", () => {
 		);
 	});
 });
+
+describe("multi-query embedding", () => {
+	const multiQueryPlanner = (queries: string[]) => ({
+		async plan(request: { query: string; limit?: number }) {
+			return {
+				expandedQueries: queries,
+				mode: "vector" as const,
+				normalizedQuery: queries[0] as string,
+				targetLimit: request.limit ?? 10,
+			};
+		},
+	});
+
+	it("embeds every expanded query and keeps the primary vector on embeddings", async () => {
+		const embedded: string[] = [];
+		let seenContext:
+			| { embeddings?: number[]; expandedEmbeddings?: number[][] }
+			| undefined;
+		const pipeline = new SearchPipeline({
+			planner: multiQueryPlanner(["bread", "sourdough", "loaf"]),
+			embedder: {
+				async embed(input: string) {
+					embedded.push(input);
+					return [embedded.length];
+				},
+			},
+			retriever: {
+				async retrieve(context) {
+					seenContext = context;
+					return [];
+				},
+			},
+		});
+
+		await pipeline.search({ query: "bread", mode: "vector", limit: 5 });
+
+		expect(embedded).toEqual(["bread", "sourdough", "loaf"]);
+		expect(seenContext?.expandedEmbeddings).toEqual([[1], [2], [3]]);
+		expect(seenContext?.embeddings).toEqual([1]);
+	});
+
+	it("prefers embedMany over per-query embed calls", async () => {
+		let embedCalls = 0;
+		let manyInputs: string[] | undefined;
+		const pipeline = new SearchPipeline({
+			planner: multiQueryPlanner(["bread", "sourdough"]),
+			embedder: {
+				async embed() {
+					embedCalls++;
+					return [0];
+				},
+				async embedMany(inputs: string[]) {
+					manyInputs = inputs;
+					return inputs.map((_, index) => [index]);
+				},
+			},
+			retriever: {
+				async retrieve() {
+					return [];
+				},
+			},
+		});
+
+		await pipeline.search({ query: "bread", mode: "vector", limit: 5 });
+
+		expect(manyInputs).toEqual(["bread", "sourdough"]);
+		expect(embedCalls).toBe(0);
+	});
+
+	it("does not set expandedEmbeddings on the single-query path", async () => {
+		let seenContext:
+			| { embeddings?: number[]; expandedEmbeddings?: number[][] }
+			| undefined;
+		const pipeline = new SearchPipeline({
+			planner: new DefaultQueryPlanner(),
+			embedder: {
+				async embed() {
+					return [0.5];
+				},
+			},
+			retriever: {
+				async retrieve(context) {
+					seenContext = context;
+					return [];
+				},
+			},
+		});
+
+		await pipeline.search({ query: "bread", mode: "vector", limit: 5 });
+
+		expect(seenContext?.embeddings).toEqual([0.5]);
+		expect(seenContext?.expandedEmbeddings).toBeUndefined();
+	});
+
+	it("throws SearchError (stage embedder) when embedMany returns a mismatched count", async () => {
+		const pipeline = new SearchPipeline({
+			planner: multiQueryPlanner(["bread", "sourdough"]),
+			embedder: {
+				async embed() {
+					return [0];
+				},
+				async embedMany() {
+					return [[0]];
+				},
+			},
+			retriever: {
+				async retrieve() {
+					return [];
+				},
+			},
+		});
+
+		await expect(
+			pipeline.search({ query: "bread", mode: "vector", limit: 5 }),
+		).rejects.toSatisfy(
+			(err: unknown) => err instanceof SearchError && err.stage === "embedder",
+		);
+	});
+});

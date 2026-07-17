@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { D1FulltextRetriever } from "../../src/adapters/cloudflare/d1-fulltext";
 import { KVCacheStore } from "../../src/adapters/cloudflare/kv-cache";
 import { VectorizeRetriever } from "../../src/adapters/cloudflare/vectorize";
 import {
 	WorkersAIEmbedder,
+	WorkersAIQueryExpander,
 	WorkersAISynthesizer,
 } from "../../src/adapters/cloudflare/workers-ai";
 import type { SearchPipelineContext } from "../../src/contracts/types";
@@ -167,6 +169,109 @@ describe("VectorizeRetriever", () => {
 		)[1];
 		expect(callOptions.topK).toBeGreaterThanOrEqual(20);
 	});
+
+	it("fans out one query per expanded embedding and RRF-merges the matches", async () => {
+		const index = {
+			query: vi.fn().mockImplementation(async (vector: number[]) => {
+				if (vector[0] === 1) {
+					return {
+						matches: [
+							{ id: "shared", metadata: { content: "shared" } },
+							{ id: "only-primary", metadata: { content: "primary" } },
+						],
+					};
+				}
+				return {
+					matches: [
+						{ id: "shared", metadata: { content: "shared" } },
+						{ id: "only-expanded", metadata: { content: "expanded" } },
+					],
+				};
+			}),
+		};
+		const retriever = new VectorizeRetriever(index);
+
+		const results = await retriever.retrieve(
+			makeContext({
+				embeddings: [1, 0],
+				expandedEmbeddings: [
+					[1, 0],
+					[0, 1],
+				],
+			}),
+		);
+
+		expect(index.query).toHaveBeenCalledTimes(2);
+		expect(results[0]?.id).toBe("shared");
+		expect(results[0]?.score ?? 0).toBeGreaterThan(
+			results.find((r) => r.id === "only-primary")?.score ?? 0,
+		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// D1FulltextRetriever
+// ---------------------------------------------------------------------------
+
+describe("D1FulltextRetriever – multi-query fan-out", () => {
+	const makeDb = (rowsByQuery: Record<string, { id: string }[]>) => {
+		const bind = vi.fn();
+		const db = {
+			prepare: vi.fn().mockReturnValue({
+				bind: bind.mockImplementation((query: string) => ({
+					all: async () => ({ results: rowsByQuery[query] ?? [] }),
+				})),
+			}),
+		};
+		return { db, bind };
+	};
+
+	it("issues one MATCH query per expanded query and RRF-merges", async () => {
+		const { db, bind } = makeDb({
+			bread: [{ id: "shared" }, { id: "only-bread" }],
+			sourdough: [{ id: "shared" }, { id: "only-sourdough" }],
+		});
+		const retriever = new D1FulltextRetriever(db, {
+			table: "docs_fts",
+			toDocument: (row) => ({ id: String(row.id), content: "" }),
+		});
+
+		const results = await retriever.retrieve(
+			makeContext({
+				plan: {
+					mode: "fulltext",
+					normalizedQuery: "bread",
+					targetLimit: 5,
+					expandedQueries: ["bread", "sourdough"],
+				},
+			}),
+		);
+
+		expect(bind).toHaveBeenCalledTimes(2);
+		expect(results[0]?.id).toBe("shared");
+	});
+
+	it("uses a single query when expandedQueries has one entry", async () => {
+		const { db, bind } = makeDb({ bread: [{ id: "1" }] });
+		const retriever = new D1FulltextRetriever(db, {
+			table: "docs_fts",
+			toDocument: (row) => ({ id: String(row.id), content: "" }),
+		});
+
+		const results = await retriever.retrieve(
+			makeContext({
+				plan: {
+					mode: "fulltext",
+					normalizedQuery: "bread",
+					targetLimit: 5,
+					expandedQueries: ["bread"],
+				},
+			}),
+		);
+
+		expect(bind).toHaveBeenCalledTimes(1);
+		expect(results[0]?.id).toBe("1");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -212,6 +317,104 @@ describe("WorkersAIEmbedder", () => {
 			"@cf/custom/embed-model",
 			expect.any(Object),
 		);
+	});
+
+	it("embedMany embeds all inputs in a single AI call", async () => {
+		const ai = {
+			run: vi.fn().mockResolvedValue({
+				data: [
+					[0.1, 0.2],
+					[0.3, 0.4],
+				],
+			}),
+		};
+		const embedder = new WorkersAIEmbedder(ai);
+
+		const vectors = await embedder.embedMany(["bread", "sourdough"]);
+
+		expect(vectors).toEqual([
+			[0.1, 0.2],
+			[0.3, 0.4],
+		]);
+		expect(ai.run).toHaveBeenCalledOnce();
+		expect(ai.run).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({ text: ["bread", "sourdough"] }),
+		);
+	});
+
+	it("embedMany throws SearchError on a mismatched vector count", async () => {
+		const ai = {
+			run: vi.fn().mockResolvedValue({ data: [[0.1]] }),
+		};
+		const embedder = new WorkersAIEmbedder(ai);
+
+		await expect(embedder.embedMany(["a", "b"])).rejects.toSatisfy(
+			(err: unknown) => err instanceof SearchError && err.stage === "embedder",
+		);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// WorkersAIQueryExpander
+// ---------------------------------------------------------------------------
+
+describe("WorkersAIQueryExpander", () => {
+	it("parses newline-separated phrasings, stripping list markers and quotes", async () => {
+		const ai = {
+			run: vi.fn().mockResolvedValue({
+				response:
+					'1. sourdough starter guide\n- "wild yeast bread"\n\n* how to feed a starter\n',
+			}),
+		};
+		const expander = new WorkersAIQueryExpander(ai);
+
+		const expansions = await expander.expand("bread starter");
+
+		expect(expansions).toEqual([
+			"sourdough starter guide",
+			"wild yeast bread",
+			"how to feed a starter",
+		]);
+	});
+
+	it("caps the number of expansions at maxExpansions", async () => {
+		const ai = {
+			run: vi.fn().mockResolvedValue({ response: "a\nb\nc\nd\ne" }),
+		};
+		const expander = new WorkersAIQueryExpander(ai, undefined, {
+			maxExpansions: 2,
+		});
+
+		const expansions = await expander.expand("bread");
+
+		expect(expansions).toEqual(["a", "b"]);
+	});
+
+	it("returns an empty list when the model produces no response", async () => {
+		const ai = { run: vi.fn().mockResolvedValue({}) };
+		const expander = new WorkersAIQueryExpander(ai);
+
+		expect(await expander.expand("bread")).toEqual([]);
+	});
+
+	it("includes the query in the prompt", async () => {
+		let capturedPrompt = "";
+		const ai = {
+			run: vi
+				.fn()
+				.mockImplementation(
+					async (_model: string, input: Record<string, unknown>) => {
+						capturedPrompt = input.prompt as string;
+						return { response: "" };
+					},
+				),
+		};
+		const expander = new WorkersAIQueryExpander(ai);
+
+		await expander.expand("bread starter");
+
+		expect(capturedPrompt).toContain("bread starter");
 	});
 });
 

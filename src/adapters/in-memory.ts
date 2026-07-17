@@ -7,6 +7,7 @@ import type {
 } from "../contracts/ports";
 import type { SearchDocument, SearchPipelineContext } from "../contracts/types";
 import { SearchError } from "../contracts/types";
+import { mergeWithRrf } from "../core/rrf";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -84,20 +85,33 @@ export class InMemoryFulltextRetriever implements Retriever {
 			);
 		}
 
-		const query =
-			context.plan.expandedQueries?.[0] ?? context.plan.normalizedQuery;
+		const queries =
+			context.plan.expandedQueries && context.plan.expandedQueries.length > 0
+				? context.plan.expandedQueries
+				: [context.plan.normalizedQuery];
+		const limit = context.plan.targetLimit * 2;
 
-		return this.documents
-			.map((document) => ({
-				...document,
-				score: scoreFulltextMatch(
-					query,
-					`${document.title ?? ""} ${document.content}`,
-				),
-			}))
-			.filter((document) => (document.score ?? 0) > 0)
-			.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-			.slice(0, context.plan.targetLimit * 2);
+		const rankFor = (query: string): SearchDocument[] =>
+			this.documents
+				.map((document) => ({
+					...document,
+					score: scoreFulltextMatch(
+						query,
+						`${document.title ?? ""} ${document.content}`,
+					),
+				}))
+				.filter((document) => (document.score ?? 0) > 0)
+				.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+				.slice(0, limit);
+
+		// Single-query fast path — no RRF overhead needed
+		if (queries.length === 1) {
+			return rankFor(queries[0] as string);
+		}
+
+		// One ranked list per expanded query, RRF-merged
+		const docMap = new Map<string, SearchDocument>();
+		return mergeWithRrf(queries.map(rankFor), docMap, limit);
 	}
 }
 
@@ -136,13 +150,29 @@ export class InMemoryVectorRetriever implements Retriever {
 			);
 		}
 
-		return this.documents
-			.map(({ document, embedding }) => ({
-				...document,
-				score: cosineSimilarity(context.embeddings as number[], embedding),
-			}))
-			.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-			.slice(0, context.plan.targetLimit * 2);
+		const vectors =
+			context.expandedEmbeddings && context.expandedEmbeddings.length > 0
+				? context.expandedEmbeddings
+				: [context.embeddings];
+		const limit = context.plan.targetLimit * 2;
+
+		const rankFor = (queryVector: number[]): SearchDocument[] =>
+			this.documents
+				.map(({ document, embedding }) => ({
+					...document,
+					score: cosineSimilarity(queryVector, embedding),
+				}))
+				.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+				.slice(0, limit);
+
+		// Single-vector fast path — no RRF overhead needed
+		if (vectors.length === 1) {
+			return rankFor(vectors[0] as number[]);
+		}
+
+		// One ranked list per expanded-query embedding, RRF-merged
+		const docMap = new Map<string, SearchDocument>();
+		return mergeWithRrf(vectors.map(rankFor), docMap, limit);
 	}
 }
 
