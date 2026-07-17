@@ -4,12 +4,14 @@ import { VectorizeRetriever } from "../adapters/cloudflare/vectorize";
 import type { PromptBuilder } from "../adapters/cloudflare/workers-ai";
 import {
 	WorkersAIEmbedder,
+	WorkersAIQueryExpander,
 	WorkersAISynthesizer,
 } from "../adapters/cloudflare/workers-ai";
 import { InMemoryDeduplicator, ScoreReranker } from "../adapters/in-memory";
 import type { SearchDocument, SearchPipelineOptions } from "../contracts/types";
 import { CompositeRetriever } from "../core/composite-retriever";
 import { DefaultQueryPlanner } from "../core/default-planner";
+import { ExpandingQueryPlanner } from "../core/expanding-planner";
 import { SearchClient } from "../core/search-client";
 
 /** Cloudflare Worker environment bindings used by {@link createCloudflareSearchClient}. */
@@ -83,6 +85,21 @@ export interface CloudflarePresetOptions extends SearchPipelineOptions {
 	toDocument?: (
 		row: Record<string, unknown> & { score: number },
 	) => SearchDocument;
+	/**
+	 * Enable multi-query expansion via Workers AI.
+	 *
+	 * When set, an `ExpandingQueryPlanner` backed by a
+	 * {@link WorkersAIQueryExpander} replaces the default planner: the query is
+	 * rewritten into alternative phrasings and every retriever fans out across
+	 * them, merging results with Reciprocal Rank Fusion.
+	 *
+	 * Off by default — expansion adds one LLM call per uncached search.
+	 *
+	 * Pass `true` for defaults, or an object to configure the expansion model
+	 * (defaults to the synthesis model default) and the total number of queries
+	 * (including the primary; default `4`).
+	 */
+	queryExpansion?: boolean | { model?: string; maxQueries?: number };
 }
 
 /**
@@ -107,10 +124,27 @@ export const createCloudflareSearchClient = (
 		promptBuilder,
 		d1Table,
 		toDocument,
+		queryExpansion,
 		...pipelineOptions
 	} = options;
 
 	const vectorizeRetriever = new VectorizeRetriever(env.VECTOR_INDEX);
+
+	const expansion =
+		queryExpansion === true ? {} : queryExpansion ? queryExpansion : undefined;
+	const planner = expansion
+		? new ExpandingQueryPlanner(
+				new WorkersAIQueryExpander(env.AI, expansion.model, {
+					maxExpansions: expansion.maxQueries
+						? Math.max(expansion.maxQueries - 1, 1)
+						: undefined,
+				}),
+				{
+					logger: pipelineOptions.logger,
+					maxQueries: expansion.maxQueries,
+				},
+			)
+		: new DefaultQueryPlanner();
 
 	const retriever =
 		env.D1_DATABASE && d1Table && toDocument
@@ -131,7 +165,7 @@ export const createCloudflareSearchClient = (
 			cache: env.SEARCH_CACHE ? new KVCacheStore(env.SEARCH_CACHE) : undefined,
 			deduplicator: new InMemoryDeduplicator(),
 			embedder: new WorkersAIEmbedder(env.AI, embeddingModel),
-			planner: new DefaultQueryPlanner(),
+			planner,
 			reranker: new ScoreReranker(),
 			retriever,
 			synthesizer: new WorkersAISynthesizer(env.AI, synthesisModel, {

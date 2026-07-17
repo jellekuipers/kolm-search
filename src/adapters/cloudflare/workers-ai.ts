@@ -1,4 +1,8 @@
-import type { Embedder, Synthesizer } from "../../contracts/ports";
+import type {
+	Embedder,
+	QueryExpander,
+	Synthesizer,
+} from "../../contracts/ports";
 import type { SearchPipelineContext } from "../../contracts/types";
 import { SearchError } from "../../contracts/types";
 
@@ -72,6 +76,85 @@ export class WorkersAIEmbedder implements Embedder {
 		}
 
 		return vector;
+	}
+
+	/**
+	 * Batch variant used by the pipeline for multi-query expansion — the
+	 * Workers AI embedding endpoint accepts an array of texts natively, so all
+	 * expanded queries are embedded in a single call.
+	 *
+	 * @param inputs - The text strings to embed.
+	 * @returns One dense float vector per input, index-aligned with `inputs`.
+	 * @throws {@link SearchError} When the binding returns a mismatched number of vectors.
+	 */
+	public async embedMany(inputs: string[]): Promise<number[][]> {
+		const output = await this.ai.run(this.model, {
+			text: inputs,
+		});
+
+		const vectors = output.data;
+		if (!vectors || vectors.length !== inputs.length) {
+			throw new SearchError(
+				`[embedder] Workers AI embedder returned ${vectors?.length ?? 0} vectors for ${inputs.length} inputs.`,
+				"embedder",
+			);
+		}
+
+		return vectors;
+	}
+}
+
+/** Options for {@link WorkersAIQueryExpander}. */
+export interface WorkersAIQueryExpanderOptions {
+	/**
+	 * Maximum number of alternative phrasings to request from the model.
+	 * @defaultValue `3`
+	 */
+	maxExpansions?: number;
+}
+
+/**
+ * {@link QueryExpander} backed by a Cloudflare Workers AI chat-completion
+ * model. Pair with `ExpandingQueryPlanner` to enable multi-query retrieval.
+ *
+ * The model is asked for newline-separated alternative phrasings; the output
+ * is parsed defensively (list markers and quotes stripped, empties dropped).
+ * The planner re-normalises and deduplicates the result, so imperfect model
+ * output degrades to fewer expansions rather than failures.
+ */
+export class WorkersAIQueryExpander implements QueryExpander {
+	private readonly maxExpansions: number;
+
+	constructor(
+		private readonly ai: WorkersAIBinding,
+		private readonly model = "@cf/meta/llama-3.1-8b-instruct",
+		options: WorkersAIQueryExpanderOptions = {},
+	) {
+		this.maxExpansions = options.maxExpansions ?? 3;
+	}
+
+	public async expand(query: string): Promise<string[]> {
+		const prompt = [
+			`Rewrite the following search query into ${this.maxExpansions} alternative phrasings that capture the same intent.`,
+			"Rules: one phrasing per line, no numbering, no bullet points, no explanations, no quotes.",
+			`Query: ${query}`,
+		].join("\n");
+
+		const output = await this.ai.run(this.model, {
+			prompt,
+			stream: false,
+		});
+
+		if (!output.response) {
+			return [];
+		}
+
+		return output.response
+			.split("\n")
+			.map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
+			.map((line) => line.replace(/^["'`]+|["'`]+$/g, ""))
+			.filter((line) => line.length > 0)
+			.slice(0, this.maxExpansions);
 	}
 }
 

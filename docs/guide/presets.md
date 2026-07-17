@@ -59,8 +59,23 @@ const client = createCloudflareSearchClient(env, {
 | `promptBuilder` | `(context: SearchPipelineContext) => string` | Built-in prompt | Custom prompt builder for the synthesizer |
 | `d1Table` | `string` | `undefined` | FTS5 virtual table name for D1 fulltext retrieval |
 | `toDocument` | `(row) => SearchDocument` | `undefined` | Map D1 rows to `SearchDocument` |
+| `queryExpansion` | `boolean \| { model?: string; maxQueries?: number }` | `false` | Enable multi-query expansion via Workers AI (see below) |
 
 When `env.D1_DATABASE`, `d1Table`, and `toDocument` are all provided, a `CompositeRetriever` with `"best-effort"` strategy is wired for hybrid fulltext + vector search.
+
+### Query Expansion
+
+Pass `queryExpansion` to replace the default planner with an `ExpandingQueryPlanner` backed by a `WorkersAIQueryExpander`. The query is rewritten into alternative phrasings and every retriever (D1 fulltext and Vectorize) fans out across them, merging results via RRF:
+
+```ts
+const client = createCloudflareSearchClient(env, {
+  d1Table: "docs_fts",
+  toDocument: (row) => ({ id: String(row.id), content: String(row.content) }),
+  queryExpansion: true, // or { model: "@cf/meta/llama-3.1-8b-instruct", maxQueries: 4 }
+});
+```
+
+`maxQueries` is the total number of queries including the primary (default `4`). Expansion is off by default because it adds one LLM call per uncached search. Expander failures degrade gracefully to the primary query alone.
 
 Supports Workers AI embeddings/synthesis, Vectorize retrieval, and optional D1 fulltext.
 

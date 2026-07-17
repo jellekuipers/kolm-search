@@ -4,6 +4,7 @@ import type {
 	SearchDocument,
 	SearchPipelineContext,
 } from "../../contracts/types";
+import { mergeWithRrf } from "../../core/rrf";
 
 /** A single match returned by Cloudflare Vectorize. */
 interface VectorizeMatch {
@@ -15,6 +16,16 @@ interface VectorizeMatch {
 interface VectorizeQueryResult {
 	matches: VectorizeMatch[];
 }
+
+// Reconstruct a SearchDocument from the metadata stored alongside the vector.
+const toDocument = (match: VectorizeMatch): SearchDocument => ({
+	content: String(match.metadata?.content ?? ""),
+	id: match.id,
+	metadata: match.metadata,
+	score: match.score,
+	source: match.metadata?.source ? String(match.metadata.source) : undefined,
+	title: match.metadata?.title ? String(match.metadata.title) : undefined,
+});
 
 /**
  * Shape of a Cloudflare Vectorize index binding as exposed in a Worker's `env`.
@@ -48,21 +59,33 @@ export class VectorizeRetriever implements Retriever {
 			return [];
 		}
 
+		const vectors =
+			context.expandedEmbeddings && context.expandedEmbeddings.length > 0
+				? context.expandedEmbeddings
+				: [context.embeddings];
 		const topK = Math.max(context.plan.targetLimit * 2, 20);
-		const result = await this.index.query(context.embeddings, {
-			returnMetadata: true,
-			topK,
-		});
 
-		return result.matches.map((match) => ({
-			content: String(match.metadata?.content ?? ""),
-			id: match.id,
-			metadata: match.metadata,
-			score: match.score,
-			source: match.metadata?.source
-				? String(match.metadata.source)
-				: undefined,
-			title: match.metadata?.title ? String(match.metadata.title) : undefined,
-		}));
+		// Single-vector fast path — no RRF overhead needed
+		if (vectors.length === 1) {
+			const result = await this.index.query(vectors[0] as number[], {
+				returnMetadata: true,
+				topK,
+			});
+			return result.matches.map(toDocument);
+		}
+
+		// Fan out to one Vectorize query per expanded-query embedding, then RRF-merge
+		const rankedLists = await Promise.all(
+			vectors.map(async (vector) => {
+				const result = await this.index.query(vector, {
+					returnMetadata: true,
+					topK,
+				});
+				return result.matches.map(toDocument);
+			}),
+		);
+
+		const docMap = new Map<string, SearchDocument>();
+		return mergeWithRrf(rankedLists, docMap, topK);
 	}
 }

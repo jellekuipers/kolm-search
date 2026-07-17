@@ -9,7 +9,8 @@ Shared types are defined in `src/contracts/types.ts`.
 | --- | --- | --- |
 | `QueryPlanner` | `plan(request): Promise<QueryPlan>` | Yes |
 | `Retriever` | `retrieve(context): Promise<SearchDocument[]>` | Yes |
-| `Embedder` | `embed(input): Promise<number[]>` | Vector/Hybrid |
+| `Embedder` | `embed(input): Promise<number[]>` / optional `embedMany(inputs): Promise<number[][]>` | Vector/Hybrid |
+| `QueryExpander` | `expand(query): Promise<string[]>` | Optional |
 | `Deduplicator` | `deduplicate(docs): SearchDocument[]` | Optional |
 | `Reranker` | `rerank(docs, context): Promise<SearchDocument[]>` | Optional |
 | `Synthesizer` | `synthesize(context): Promise<string \| undefined>` | Optional |
@@ -18,6 +19,20 @@ Shared types are defined in `src/contracts/types.ts`.
 | `Telemetry` | `track(event, payload): Promise<void>` | Optional |
 
 Implementing these interfaces is the preferred way to integrate custom systems.
+
+### `Embedder.embedMany` (optional)
+
+When the query plan contains multiple expanded queries, the pipeline embeds all of them. Implement `embedMany` when your provider supports batch embedding in a single call; otherwise the pipeline falls back to parallel `embed` calls. The returned array must be index-aligned with the inputs — a mismatched count is rejected with `SearchError` (`stage: "embedder"`).
+
+### `QueryExpander`
+
+Produces alternative phrasings of a query for multi-query retrieval. Consumed by `ExpandingQueryPlanner` (see [core reference](/reference/core#expandingqueryplanner)) — not wired into the pipeline directly.
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `expand` | `(query: string) => Promise<string[]>` | Returns alternative phrasings of the normalised query. The primary query itself should not be included; the planner keeps it at index 0 |
+
+The planner re-normalises and deduplicates the returned strings, so implementations do not need to worry about casing or whitespace.
 
 ## `SearchPipelineModules`
 
@@ -142,7 +157,8 @@ Mutable state object threaded through all pipeline stages. Created at the start 
 | --- | --- | --- |
 | `request` | `SearchRequest` | The validated incoming request |
 | `plan` | `QueryPlan` | The resolved query plan, including intent |
-| `embeddings` | `number[] \| undefined` | Query embedding vector. Populated by the `Embedder` stage; `undefined` in fulltext-only mode |
+| `embeddings` | `number[] \| undefined` | Embedding vector for the primary query. Populated by the `Embedder` stage; `undefined` in fulltext-only mode |
+| `expandedEmbeddings` | `number[][] \| undefined` | One embedding per `plan.expandedQueries` entry, index-aligned. Populated in vector/hybrid mode when the plan has more than one expanded query; `expandedEmbeddings[0]` equals `embeddings` |
 | `candidates` | `SearchDocument[]` | Raw candidates before deduplication/reranking |
 | `results` | `SearchDocument[]` | Final ranked documents after deduplication, reranking, and pagination |
 | `answer` | `string \| undefined` | LLM-generated answer. Populated by the `Synthesizer` stage |

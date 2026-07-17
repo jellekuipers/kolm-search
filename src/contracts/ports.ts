@@ -24,6 +24,35 @@ export interface Embedder {
 	 * @returns A dense float vector representing `input`.
 	 */
 	embed(input: string): Promise<number[]>;
+	/**
+	 * Optional batch variant used by the pipeline when the query plan contains
+	 * multiple expanded queries. Implement it when your provider supports batch
+	 * embedding in a single call; otherwise the pipeline falls back to parallel
+	 * `embed` calls.
+	 *
+	 * @param inputs - The text strings to embed.
+	 * @returns One dense float vector per input, index-aligned with `inputs`.
+	 */
+	embedMany?(inputs: string[]): Promise<number[][]>;
+}
+
+/**
+ * Produces alternative phrasings of a query for multi-query retrieval.
+ * Used by `ExpandingQueryPlanner` to populate {@link QueryPlan.expandedQueries}.
+ *
+ * @remarks
+ * Implementations typically call an LLM, a synonym service, or a
+ * domain-specific rewrite table. Returned strings are re-normalised and
+ * deduplicated by the planner, so implementations do not need to worry about
+ * casing or whitespace.
+ */
+export interface QueryExpander {
+	/**
+	 * @param query - The normalised primary query.
+	 * @returns Alternative phrasings of `query`. The primary query itself
+	 *   should not be included; the planner always keeps it at index 0.
+	 */
+	expand(query: string): Promise<string[]>;
 }
 
 /**

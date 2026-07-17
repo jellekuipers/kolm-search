@@ -149,8 +149,16 @@ export interface SearchPipelineContext {
 	request: SearchRequest;
 	/** The resolved query plan, including intent classification result. */
 	plan: QueryPlan;
-	/** Query embedding vector. Populated by the {@link Embedder} stage. */
+	/** Embedding vector for the primary query. Populated by the {@link Embedder} stage. */
 	embeddings?: number[];
+	/**
+	 * One embedding per {@link QueryPlan.expandedQueries} entry, index-aligned.
+	 * Populated by the {@link Embedder} stage in `"vector"` / `"hybrid"` mode
+	 * when the plan contains more than one expanded query.
+	 * `expandedEmbeddings[0]` is always the primary query's vector and equals
+	 * {@link SearchPipelineContext.embeddings}.
+	 */
+	expandedEmbeddings?: number[][];
 	/** Raw candidates returned by the retriever before deduplication/reranking. */
 	candidates: SearchDocument[];
 	/** Final ranked documents after deduplication, reranking, and pagination. */

@@ -293,3 +293,122 @@ describe("createVectorRetriever", () => {
 		expect(results[0]?.content).toBe("crusty loaf");
 	});
 });
+
+describe("createVectorRetriever – multi-vector RRF fan-out", () => {
+	it("calls search once per expanded-query embedding", async () => {
+		const search = vi.fn().mockResolvedValue([]);
+
+		const retriever = createVectorRetriever({
+			search,
+			toDocument: (row: { id: string }) => ({ id: row.id, content: "" }),
+		});
+
+		await retriever.retrieve(
+			makeContext({
+				embeddings: [1, 0],
+				expandedEmbeddings: [
+					[1, 0],
+					[0, 1],
+					[0.5, 0.5],
+				],
+				plan: { mode: "vector", normalizedQuery: "bread", targetLimit: 5 },
+			}),
+		);
+
+		expect(search).toHaveBeenCalledTimes(3);
+		expect(search).toHaveBeenNthCalledWith(
+			2,
+			[0, 1],
+			expect.any(Number),
+			expect.any(Object),
+		);
+	});
+
+	it("fuses per-vector results with RRF so a doc found by multiple vectors ranks higher", async () => {
+		const search = vi.fn().mockImplementation(async (vector: number[]) => {
+			if (vector[0] === 1) {
+				return [
+					{ id: "shared", content: "shared" },
+					{ id: "only-primary", content: "primary" },
+				];
+			}
+			return [
+				{ id: "shared", content: "shared" },
+				{ id: "only-expanded", content: "expanded" },
+			];
+		});
+
+		const retriever = createVectorRetriever({
+			search,
+			toDocument: (row: { id: string; content: string }) => ({
+				id: row.id,
+				content: row.content,
+			}),
+		});
+
+		const results = await retriever.retrieve(
+			makeContext({
+				embeddings: [1, 0],
+				expandedEmbeddings: [
+					[1, 0],
+					[0, 1],
+				],
+				plan: { mode: "vector", normalizedQuery: "bread", targetLimit: 10 },
+			}),
+		);
+
+		expect(results[0]?.id).toBe("shared");
+		expect(results[0]?.score ?? 0).toBeGreaterThan(
+			results.find((r) => r.id === "only-primary")?.score ?? 0,
+		);
+	});
+
+	it("uses the single-vector fast path when only embeddings is set", async () => {
+		const search = vi.fn().mockResolvedValue([]);
+
+		const retriever = createVectorRetriever({
+			search,
+			toDocument: (row: { id: string }) => ({ id: row.id, content: "" }),
+		});
+
+		await retriever.retrieve(
+			makeContext({
+				embeddings: [1, 0],
+				plan: { mode: "vector", normalizedQuery: "bread", targetLimit: 5 },
+			}),
+		);
+
+		expect(search).toHaveBeenCalledTimes(1);
+	});
+
+	it("primaryQueryBoost weights the primary vector's list", async () => {
+		// primary vector finds "primary-only"; both expanded vectors find "expanded-only"
+		const search = vi.fn().mockImplementation(async (vector: number[]) => {
+			if (vector[0] === 1) return [{ id: "primary-only", content: "primary" }];
+			return [{ id: "expanded-only", content: "expanded" }];
+		});
+
+		const boosted = createVectorRetriever({
+			search,
+			toDocument: (row: { id: string; content: string }) => ({
+				id: row.id,
+				content: row.content,
+			}),
+			primaryQueryBoost: 3,
+		});
+
+		const results = await boosted.retrieve(
+			makeContext({
+				embeddings: [1, 0],
+				expandedEmbeddings: [
+					[1, 0],
+					[0, 1],
+					[0, 0.5],
+				],
+				plan: { mode: "vector", normalizedQuery: "bread", targetLimit: 10 },
+			}),
+		);
+
+		expect(results[0]?.id).toBe("primary-only");
+	});
+});

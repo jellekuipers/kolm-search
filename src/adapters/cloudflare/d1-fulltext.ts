@@ -3,6 +3,7 @@ import type {
 	SearchDocument,
 	SearchPipelineContext,
 } from "../../contracts/types";
+import { mergeWithRrf } from "../../core/rrf";
 
 /** A Cloudflare D1 statement after arguments have been bound. */
 interface D1BoundStatement {
@@ -82,17 +83,36 @@ export class D1FulltextRetriever<TRow extends Record<string, unknown>>
 	public async retrieve(
 		context: SearchPipelineContext,
 	): Promise<SearchDocument[]> {
-		const query =
-			context.plan.expandedQueries?.[0] ?? context.plan.normalizedQuery;
+		const queries =
+			context.plan.expandedQueries && context.plan.expandedQueries.length > 0
+				? context.plan.expandedQueries
+				: [context.plan.normalizedQuery];
 		const limit = context.plan.targetLimit * 2;
 		const { table } = this.options;
 
 		const sql = `SELECT *, -rank AS score FROM "${table}" WHERE "${table}" MATCH ? ORDER BY rank LIMIT ?`;
-		const { results } = await this.db
-			.prepare(sql)
-			.bind(query, limit)
-			.all<TRow & { score: number }>();
 
-		return results.map(this.options.toDocument);
+		// Single-query fast path — no RRF overhead needed
+		if (queries.length === 1) {
+			const { results } = await this.db
+				.prepare(sql)
+				.bind(queries[0], limit)
+				.all<TRow & { score: number }>();
+			return results.map(this.options.toDocument);
+		}
+
+		// Fan out to one MATCH query per expanded query, then RRF-merge
+		const rankedLists = await Promise.all(
+			queries.map(async (query) => {
+				const { results } = await this.db
+					.prepare(sql)
+					.bind(query, limit)
+					.all<TRow & { score: number }>();
+				return results.map(this.options.toDocument);
+			}),
+		);
+
+		const docMap = new Map<string, SearchDocument>();
+		return mergeWithRrf(rankedLists, docMap, limit);
 	}
 }
