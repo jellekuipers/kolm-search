@@ -15,74 +15,74 @@
  *   pnpm dev
  */
 
-import { serve } from "@hono/node-server";
-import { zValidator } from "@hono/zod-validator";
-import { Hono } from "hono";
-import type { SearchDocument } from "kolm-search";
-import { createBasicSearchClient } from "kolm-search/presets/basic";
-import { z } from "zod";
+import { serve } from '@hono/node-server';
+import { zValidator } from '@hono/zod-validator';
+import { Hono } from 'hono';
+import type { SearchDocument } from 'kolm-search';
+import { createBasicSearchClient } from 'kolm-search/presets/basic';
+import { z } from 'zod';
 
 // ---------------------------------------------------------------------------
 // Seed corpus
 // ---------------------------------------------------------------------------
 
 const DOCUMENTS: SearchDocument[] = [
-	{
-		id: "1",
-		title: "Getting Started",
-		content:
-			"Learn how to install and configure kolm-search. Add it to your project with pnpm add kolm-search.",
-		tags: ["install", "setup"],
-	},
-	{
-		id: "2",
-		title: "Pipeline Architecture",
-		content:
-			"Explore the modular pipeline with pluggable stages: QueryPlanner, Embedder, Retriever, Reranker, Synthesizer, and more.",
-		tags: ["architecture", "pipeline"],
-	},
-	{
-		id: "3",
-		title: "Cloudflare Workers Integration",
-		content:
-			"Deploy search to the edge with Workers AI embeddings and Cloudflare Vectorize for fast ANN retrieval.",
-		tags: ["cloudflare", "edge", "vectorize"],
-	},
-	{
-		id: "4",
-		title: "PostgreSQL Setup",
-		content:
-			"Wire up fulltext search with pg_trgm and vector search with pgvector using the generic adapter factory.",
-		tags: ["postgres", "pgvector", "fulltext"],
-	},
-	{
-		id: "5",
-		title: "Custom Adapters",
-		content:
-			"Build your own Retriever, Reranker, Synthesizer, or CacheStore by implementing the plugin interfaces.",
-		tags: ["adapters", "extensibility"],
-	},
-	{
-		id: "6",
-		title: "CompositeRetriever",
-		content:
-			"Run multiple retrievers in parallel and fuse their ranked lists with Reciprocal Rank Fusion for hybrid search.",
-		tags: ["hybrid", "rrf", "composite"],
-	},
-	{
-		id: "7",
-		title: "Redis Cache Adapter",
-		content:
-			"Share cached search responses across multiple instances with RedisCacheStore, compatible with ioredis and node-redis.",
-		tags: ["cache", "redis"],
-	},
-	{
-		id: "8",
-		title: "Schema Validation",
-		content:
-			"Validate search requests and responses with any Standard Schema V1-compatible library: Zod, Valibot, ArkType.",
-		tags: ["validation", "schema", "zod"],
-	},
+  {
+    id: '1',
+    title: 'Getting Started',
+    content:
+      'Learn how to install and configure kolm-search. Add it to your project with pnpm add kolm-search.',
+    tags: ['install', 'setup'],
+  },
+  {
+    id: '2',
+    title: 'Pipeline Architecture',
+    content:
+      'Explore the modular pipeline with pluggable stages: QueryPlanner, Embedder, Retriever, Reranker, Synthesizer, and more.',
+    tags: ['architecture', 'pipeline'],
+  },
+  {
+    id: '3',
+    title: 'Cloudflare Workers Integration',
+    content:
+      'Deploy search to the edge with Workers AI embeddings and Cloudflare Vectorize for fast ANN retrieval.',
+    tags: ['cloudflare', 'edge', 'vectorize'],
+  },
+  {
+    id: '4',
+    title: 'PostgreSQL Setup',
+    content:
+      'Wire up fulltext search with pg_trgm and vector search with pgvector using the generic adapter factory.',
+    tags: ['postgres', 'pgvector', 'fulltext'],
+  },
+  {
+    id: '5',
+    title: 'Custom Adapters',
+    content:
+      'Build your own Retriever, Reranker, Synthesizer, or CacheStore by implementing the plugin interfaces.',
+    tags: ['adapters', 'extensibility'],
+  },
+  {
+    id: '6',
+    title: 'CompositeRetriever',
+    content:
+      'Run multiple retrievers in parallel and fuse their ranked lists with Reciprocal Rank Fusion for hybrid search.',
+    tags: ['hybrid', 'rrf', 'composite'],
+  },
+  {
+    id: '7',
+    title: 'Redis Cache Adapter',
+    content:
+      'Share cached search responses across multiple instances with RedisCacheStore, compatible with ioredis and node-redis.',
+    tags: ['cache', 'redis'],
+  },
+  {
+    id: '8',
+    title: 'Schema Validation',
+    content:
+      'Validate search requests and responses with any Standard Schema V1-compatible library: Zod, Valibot, ArkType.',
+    tags: ['validation', 'schema', 'zod'],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -107,8 +107,8 @@ const DOCUMENTS: SearchDocument[] = [
  * location for HTTP concerns), but both approaches are valid.
  */
 const client = createBasicSearchClient(DOCUMENTS, {
-	defaultLimit: 5,
-	maxQueryLength: 500,
+  defaultLimit: 5,
+  maxQueryLength: 500,
 });
 
 // ---------------------------------------------------------------------------
@@ -116,8 +116,8 @@ const client = createBasicSearchClient(DOCUMENTS, {
 // ---------------------------------------------------------------------------
 
 const searchBodySchema = z.object({
-	query: z.string().min(1, "Query must not be empty").max(500),
-	limit: z.number().int().min(1).max(50).optional(),
+  query: z.string().min(1, 'Query must not be empty').max(500),
+  limit: z.number().int().min(1).max(50).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -126,23 +126,23 @@ const searchBodySchema = z.object({
 
 const app = new Hono();
 
-app.get("/health", (c) => c.json({ status: "ok" }));
+app.get('/health', (c) => c.json({ status: 'ok' }));
 
-app.post("/search", zValidator("json", searchBodySchema), async (c) => {
-	const { query, limit } = c.req.valid("json");
+app.post('/search', zValidator('json', searchBodySchema), async (c) => {
+  const { query, limit } = c.req.valid('json');
 
-	try {
-		const response = await client.search({ query, limit });
-		return c.json({
-			query,
-			results: response.results,
-			total: response.pagination.totalCandidates,
-			durationMs: response.durationMs,
-		});
-	} catch (error) {
-		const message = error instanceof Error ? error.message : "Search failed.";
-		return c.json({ error: message }, 500);
-	}
+  try {
+    const response = await client.search({ query, limit });
+    return c.json({
+      query,
+      results: response.results,
+      total: response.pagination.totalCandidates,
+      durationMs: response.durationMs,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Search failed.';
+    return c.json({ error: message }, 500);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -152,11 +152,11 @@ app.post("/search", zValidator("json", searchBodySchema), async (c) => {
 const PORT = Number(process.env.PORT ?? 3000);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
-	console.log(
-		`kolm-search Hono example running on http://localhost:${info.port}`,
-	);
-	console.log(`  POST http://localhost:${info.port}/search`);
-	console.log(`       body: { "query": "hybrid search", "limit": 3 }`);
+  console.log(
+    `kolm-search Hono example running on http://localhost:${info.port}`,
+  );
+  console.log(`  POST http://localhost:${info.port}/search`);
+  console.log(`       body: { "query": "hybrid search", "limit": 3 }`);
 });
 
 export default app;
