@@ -130,4 +130,5 @@ try {
 
 - Learn the pipeline stages in [/guide/architecture](/guide/architecture)
 - Pick a preset in [/guide/presets](/guide/presets)
+- Explore deployment templates in [/guide/examples](/guide/examples)
 - Explore interfaces in [/reference/contracts](/reference/contracts)

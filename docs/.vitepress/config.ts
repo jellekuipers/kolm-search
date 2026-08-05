@@ -23,6 +23,10 @@ export default defineConfig({
 						{ text: "Getting Started", link: "/guide/getting-started" },
 						{ text: "Architecture", link: "/guide/architecture" },
 						{ text: "Presets", link: "/guide/presets" },
+						{
+							text: "Examples",
+							link: "/guide/examples",
+						},
 					],
 				},
 			],
