@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-08-05
+
+### Fixed
+
+- Documentation links now use relative markdown paths so they work both on the hosted docs site and when browsing docs files on GitHub.
+- Replaced repeated "Why this works" section headings in the examples guide with a more generic heading.
+
 ## [1.1.1] - 2026-08-05
 
 ### Fixed

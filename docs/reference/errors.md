@@ -19,7 +19,7 @@ try {
 }
 ```
 
-Use `PIPELINE_STAGES` constants (see [Core API reference](/reference/core#pipeline_stages)) to compare stages without hard-coding strings:
+Use `PIPELINE_STAGES` constants (see [Core API reference](./core.md#pipeline_stages)) to compare stages without hard-coding strings:
 
 ```ts
 if (error instanceof SearchError && error.stage === PIPELINE_STAGES.EMBEDDER) {

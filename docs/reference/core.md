@@ -156,7 +156,7 @@ const plan = await planner.plan({ query: "  How   To  INSTALL  " });
 
 ## `ExpandingQueryPlanner`
 
-`QueryPlanner` that performs multi-query expansion via an injected `QueryExpander` (see [contracts reference](/reference/contracts)). Every built-in retriever fans out across `expandedQueries` — one search per query (or per query embedding in vector/hybrid mode) — and merges the ranked lists with RRF.
+`QueryPlanner` that performs multi-query expansion via an injected `QueryExpander` (see [contracts reference](./contracts.md)). Every built-in retriever fans out across `expandedQueries` — one search per query (or per query embedding in vector/hybrid mode) — and merges the ranked lists with RRF.
 
 | Constructor Parameter | Type | Required | Description |
 | --- | --- | --- | --- |

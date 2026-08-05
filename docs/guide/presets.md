@@ -16,7 +16,7 @@ const client = createBasicSearchClient(documents, {
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `documents` | `SearchDocument[]` | Yes | — | Document corpus to search over |
-| `options` | `SearchPipelineOptions` | No | `{}` | Pipeline configuration (see [contracts reference](/reference/contracts#searchpipelineoptions)) |
+| `options` | `SearchPipelineOptions` | No | `{}` | Pipeline configuration (see [contracts reference](../reference/contracts.md#searchpipelineoptions)) |
 | `cache` | `CacheStore` | No | `InMemoryCache` | Custom cache store |
 
 Wires: `InMemoryFulltextRetriever`, `InMemoryDeduplicator`, `ScoreReranker`, `DefaultQueryPlanner`, and `InMemoryCache`. No vector/embedding support — compose `InMemoryFulltextRetriever` with `InMemoryVectorRetriever` via `CompositeRetriever` for hybrid search in tests.

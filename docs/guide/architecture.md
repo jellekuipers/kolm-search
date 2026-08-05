@@ -30,7 +30,7 @@ SearchClient.search()
   -> SearchResponse
 ```
 
-Each stage that fails wraps its error in a `SearchError` with a `stage` label matching the step name (e.g. `"embedder"`, `"retriever"`). See [Errors reference](/reference/errors) for the full list.
+Each stage that fails wraps its error in a `SearchError` with a `stage` label matching the step name (e.g. `"embedder"`, `"retriever"`). See [Errors reference](../reference/errors.md) for the full list.
 
 ## SearchClient vs SearchPipeline
 

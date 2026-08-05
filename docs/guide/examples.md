@@ -87,7 +87,7 @@ const client = createPostgresSearchClient({
 });
 ```
 
-### Why this works
+### Key points
 
 - Fulltext captures exact terms (`SCIM`, `SAML`, feature flags).
 - Vector retrieval captures intent phrased differently.
@@ -136,7 +136,7 @@ export default {
 };
 ```
 
-### Why this works
+### Key points
 
 - Query expansion broadens recall for short user queries.
 - Expansion degrades gracefully to the base query if the expander fails.
@@ -192,7 +192,7 @@ async function searchApiHandler(query: unknown) {
 }
 ```
 
-### Why this works
+### Key points
 
 - Invalid requests are rejected before touching expensive retrieval/model stages.
 - Callers can distinguish contract errors from backend errors.
@@ -222,7 +222,7 @@ const result = await client.search({ query: "billing portal" });
 console.log(result.results.map((r) => r.id));
 ```
 
-### Why this works
+### Key points
 
 - Fast local iteration without external service dependencies.
 - Easy test harness for tuning behavior and regression checks.
@@ -240,6 +240,6 @@ When moving to production, verify:
 
 ## Next steps
 
-- Review [Presets](/guide/presets) for environment-specific options.
-- Review [Architecture](/guide/architecture) for stage behavior and flow.
-- Review [Errors and Stages](/reference/errors) for robust error handling.
+- Review [Presets](./presets.md) for environment-specific options.
+- Review [Architecture](./architecture.md) for stage behavior and flow.
+- Review [Errors and Stages](../reference/errors.md) for robust error handling.

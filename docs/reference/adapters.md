@@ -307,7 +307,7 @@ const embedder = new WorkersAIEmbedder(
 
 ### `WorkersAIQueryExpander`
 
-`QueryExpander` backed by a Cloudflare Workers AI chat-completion model. Pair with `ExpandingQueryPlanner` (see [core reference](/reference/core#expandingqueryplanner)) to enable multi-query retrieval.
+`QueryExpander` backed by a Cloudflare Workers AI chat-completion model. Pair with `ExpandingQueryPlanner` (see [core reference](./core.md#expandingqueryplanner)) to enable multi-query retrieval.
 
 | Constructor Parameter | Type | Default | Description |
 | --- | --- | --- | --- |

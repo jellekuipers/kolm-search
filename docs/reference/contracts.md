@@ -66,7 +66,7 @@ When the query plan contains multiple expanded queries, the pipeline embeds all 
 
 ### `QueryExpander`
 
-Produces alternative phrasings of a query for multi-query retrieval. Consumed by `ExpandingQueryPlanner` (see [core reference](/reference/core#expandingqueryplanner)) — not wired into the pipeline directly.
+Produces alternative phrasings of a query for multi-query retrieval. Consumed by `ExpandingQueryPlanner` (see [core reference](./core.md#expandingqueryplanner)) — not wired into the pipeline directly.
 
 | Method | Signature | Description |
 | --- | --- | --- |
