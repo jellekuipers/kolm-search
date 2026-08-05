@@ -20,6 +20,46 @@ Shared types are defined in `src/contracts/types.ts`.
 
 Implementing these interfaces is the preferred way to integrate custom systems.
 
+Example module stubs:
+
+```ts
+import type {
+  QueryPlanner,
+  Retriever,
+  Embedder,
+  Reranker,
+} from "kolm-search";
+
+const planner: QueryPlanner = {
+  async plan(request) {
+    return {
+      normalizedQuery: request.query.trim().toLowerCase(),
+      expandedQueries: [request.query.trim().toLowerCase()],
+      mode: request.mode ?? "hybrid",
+      targetLimit: request.limit ?? 10,
+    };
+  },
+};
+
+const retriever: Retriever = {
+  async retrieve(context) {
+    return dbSearch(context.plan.normalizedQuery, context.plan.targetLimit);
+  },
+};
+
+const embedder: Embedder = {
+  async embed(input) {
+    return embeddingProvider.embed(input);
+  },
+};
+
+const reranker: Reranker = {
+  async rerank(docs) {
+    return docs;
+  },
+};
+```
+
 ### `Embedder.embedMany` (optional)
 
 When the query plan contains multiple expanded queries, the pipeline embeds all of them. Implement `embedMany` when your provider supports batch embedding in a single call; otherwise the pipeline falls back to parallel `embed` calls. The returned array must be index-aligned with the inputs — a mismatched count is rejected with `SearchError` (`stage: "embedder"`).
@@ -33,6 +73,20 @@ Produces alternative phrasings of a query for multi-query retrieval. Consumed by
 | `expand` | `(query: string) => Promise<string[]>` | Returns alternative phrasings of the normalised query. The primary query itself should not be included; the planner keeps it at index 0 |
 
 The planner re-normalises and deduplicates the returned strings, so implementations do not need to worry about casing or whitespace.
+
+Example:
+
+```ts
+const expander: QueryExpander = {
+  async expand(query) {
+    return [
+      `${query} setup`,
+      `${query} guide`,
+      `${query} troubleshooting`,
+    ];
+  },
+};
+```
 
 ## `SearchPipelineModules`
 
@@ -50,6 +104,22 @@ Container interface accepted by `SearchClient` and `SearchPipeline`. Groups all 
 | `cache` | `CacheStore` | No | Caches responses to avoid redundant retrieval round-trips |
 | `telemetry` | `Telemetry` | No | Emits observability events after each successful search |
 
+Example:
+
+```ts
+const modules: SearchPipelineModules = {
+  planner,
+  retriever,
+  embedder,
+  deduplicator,
+  reranker,
+  synthesizer,
+  intentClassifier,
+  cache,
+  telemetry,
+};
+```
+
 ## `SearchPipelineOptions`
 
 Configuration object accepted by `SearchClient`, `SearchPipeline`, and preset factories.
@@ -64,6 +134,18 @@ Configuration object accepted by `SearchClient`, `SearchPipeline`, and preset fa
 | `outputSchema` | `StandardSchemaV1` | `undefined` | Standard Schema validator for outgoing `SearchResponse` |
 | `maxQueryLength` | `number` | No limit | Maximum allowed query length in characters. Queries exceeding this are rejected with `stage: "client"` |
 
+Example:
+
+```ts
+const options: SearchPipelineOptions = {
+  defaultLimit: 12,
+  defaultMode: "hybrid",
+  cacheTtlSeconds: 120,
+  maxQueryLength: 500,
+  logger: console,
+};
+```
+
 ## Types
 
 ### `SearchMode`
@@ -73,6 +155,13 @@ type SearchMode = "vector" | "fulltext" | "hybrid";
 ```
 
 Controls which retrieval strategy the pipeline uses. Default: `"hybrid"`.
+
+Example:
+
+```ts
+await client.search({ query: "install", mode: "fulltext" });
+await client.search({ query: "explain oauth device flow", mode: "hybrid" });
+```
 
 ### `SearchDocument`
 
@@ -96,6 +185,19 @@ Controls which retrieval strategy the pipeline uses. Default: `"hybrid"`.
 | `mode` | `SearchMode` | `defaultMode` ("hybrid") | Retrieval strategy |
 | `filters` | `Record<string, JsonValue>` | `{}` | Arbitrary key/value filters forwarded to the retriever |
 | `context` | `Record<string, JsonValue>` | `{}` | Caller-supplied context forwarded through the pipeline unchanged |
+
+Example:
+
+```ts
+await client.search({
+  query: "sso config",
+  limit: 10,
+  offset: 0,
+  mode: "hybrid",
+  filters: { tenantId: "acme-inc", locale: "en" },
+  context: { userId: "u_123", requestId: "req_789" },
+});
+```
 
 ### `QueryPlan`
 
@@ -177,6 +279,17 @@ Minimal structured logger interface. Inject via `SearchPipelineOptions.logger` t
 | `error` | `(message: string, payload?: unknown) => void` |
 
 Any `console`-like object satisfies this interface.
+
+Example:
+
+```ts
+const logger: Logger = {
+  debug: (message, payload) => console.debug(message, payload),
+  info: (message, payload) => console.info(message, payload),
+  warn: (message, payload) => console.warn(message, payload),
+  error: (message, payload) => console.error(message, payload),
+};
+```
 
 ### `Telemetry`
 

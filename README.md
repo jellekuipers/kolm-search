@@ -1,35 +1,50 @@
 # kolm-search
 
-> **Headless RAG search orchestration for your existing stack.**
-> Build production-grade search pipelines using your own databases and LLM providers. Zero vendor lock-in, edge-ready, and fully type-safe.
+> Headless RAG search orchestration for your existing stack.
+> Build production-grade search pipelines using your own databases and LLM providers.
 
 [![npm version](https://img.shields.io/npm/v/kolm-search)](https://www.npmjs.com/package/kolm-search)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Overview
 
-`kolm-search` is a TypeScript library for building professional search and Retrieval-Augmented Generation (RAG) pipelines.
+`kolm-search` is an adapter-driven search and orchestration pipeline for TypeScript. It provides a headless framework for building Retrieval-Augmented Generation (RAG) and hybrid search implementations without coupling to specific infrastructure.
 
-It is designed as a headless search engine, providing the orchestration logic—query expansion, hybrid retrieval (vector + fulltext), reranking, and LLM synthesis—while letting you keep your data where it lives. Designed for developers who need complete control over their retrieval logic, `kolm-search` offers a transparent, minimal-dependency alternative to larger, generalized AI frameworks.
+### Features
 
-- ✅ **Full RAG Pipeline:** Hybrid search, Reciprocal Rank Fusion (RRF), and query normalization out-of-the-box.
-- ✅ **Zero Vendor Lock-in:** Bring your own database (Postgres, D1, etc.) and your own LLM provider (OpenAI, Anthropic, Workers AI).
-- ✅ **Edge-Ready Performance:** Designed for high-performance Node.js, Bun, and Edge environments (Cloudflare Workers).
-- ✅ **Strictly Type-Safe:** Built with TypeScript and [Standard Schema V1](https://standardschema.dev/) support for validated inputs/outputs.
+- **Infrastructure Agnostic:** Integrates with existing data stores (e.g., PostgreSQL, Cloudflare D1, Redis, Vectorize) and model providers (e.g., OpenAI, Workers AI, Anthropic).
+- **Deterministic Pipeline:** Executes a structured lifecycle (`plan -> retrieve -> rerank -> synthesize`).
+- **Hybrid Search:** Combines fulltext and vector retrieval natively using Reciprocal Rank Fusion (RRF).
+- **Error Diagnostics:** Provides strict, stage-aware error propagation (`SearchError` with stage labels).
+- **Type Safety & Validation:** Supports optional request and response validation at boundary layers.
 
----
+## How components fit together
 
-## Documentation
+```text
+SearchClient.search(request)
+  -> cache.get            (optional short-circuit)
+  -> QueryPlanner         (required)
+  -> IntentClassifier     (optional)
+  -> Embedder             (required for vector/hybrid)
+  -> Retriever            (required)
+  -> Deduplicator         (optional)
+  -> Reranker             (optional)
+  -> Pagination
+  -> Synthesizer          (optional)
+  -> cache.set            (optional)
+  -> SearchResponse
+```
 
-- [Guide: Getting Started & Concepts](docs/guide/getting-started.md)
-- [Guide: Architecture](docs/guide/architecture.md)
-- [Guide: Presets](docs/guide/presets.md)
-- [Reference: Core API](docs/reference/core.md)
-- [Reference: Adapters](docs/reference/adapters.md)
-- [Reference: Contracts](docs/reference/contracts.md)
-- [Reference: Errors](docs/reference/errors.md)
+Layering model:
 
----
+```text
+contracts/ -> core/ -> adapters/ -> presets/
+```
+
+- `contracts`: shared types and interfaces (ports)
+- `core`: orchestration and public API (`SearchClient`)
+- `adapters`: implementations of ports (in-memory, Redis, Cloudflare, generic)
+- `presets`: ready-to-use wiring for common deployments
 
 ## Installation
 
@@ -47,182 +62,325 @@ yarn add kolm-search
 bun add kolm-search
 ```
 
----
+## Quick start
 
-## Quick Start (Presets)
+### In-memory preset for local development
 
-Presets are pre-configured search clients for specific environments.
-
-### 1. In-Memory (Dev/Testing)
-```typescript
-import { createBasicSearchClient } from "kolm-search/presets/basic";
+```ts
+import { createBasicSearchClient } from 'kolm-search/presets/basic';
 
 const client = createBasicSearchClient([
-  { id: "1", title: "Setup", content: "Install via pnpm add kolm-search" },
+  {
+    id: 'guide-1',
+    title: 'Getting Started',
+    content: 'Install with pnpm add kolm-search',
+    tags: ['docs', 'onboarding'],
+  },
+  {
+    id: 'guide-2',
+    title: 'Architecture',
+    content: 'Query planner, retriever, reranker, and synthesizer stages',
+    tags: ['docs', 'architecture'],
+  },
 ]);
 
-const { results } = await client.search({ query: "how to install" });
+const response = await client.search({
+  query: 'how does the retriever stage work',
+  mode: 'fulltext',
+  limit: 5,
+});
+
+console.log(response.results.map((r) => r.title));
 ```
 
-### 2. Cloudflare (Workers + Vectorize + D1)
-```typescript
-import { createCloudflareSearchClient } from "kolm-search/presets/cloudflare";
+## Enterprise hybrid search (Postgres + pgvector + OpenAI)
 
-export default {
-  async fetch(request, env) {
-    const client = createCloudflareSearchClient(env, { d1Table: "docs_fts" });
-    const response = await client.search({ query: "hybrid search", mode: "hybrid" });
-    return Response.json(response);
-  },
+### Prerequisites
+
+- PostgreSQL document storage
+- `tsvector` column for keyword retrieval
+- `pgvector` extension for semantic embeddings
+- (Optional) LLM provider for synthesis
+
+```ts
+import { createPostgresSearchClient } from 'kolm-search/presets/postgres';
+import {
+  createFulltextRetriever,
+  createVectorRetriever,
+} from 'kolm-search/adapters/generic';
+
+type ArticleRow = {
+  id: string;
+  title: string;
+  content: string;
+  source: string;
+  rank?: number;
+  similarity?: number;
 };
-```
 
----
-
-## Example: Custom RAG Implementation
-
-`kolm-search` is adapter-driven. You can mix and match providers for different stages of the lifecycle by implementing simple interfaces.
-
-```typescript
-import { SearchClient, DefaultQueryPlanner } from "kolm-search";
-import { createFulltextRetriever } from "kolm-search/adapters/generic";
-
-const client = new SearchClient({
-  // Required: normalize and plan queries.
-  // Swap in ExpandingQueryPlanner for multi-query expansion (see below).
-  planner: new DefaultQueryPlanner(),
-
-  // 1. Convert text to vector
-  embedder: {
-    async embed(text) {
-      const res = await openai.embeddings.create({ model: "text-embedding-3-small", input: text });
-      return res.data[0].embedding;
-    }
+const fulltextRetriever = createFulltextRetriever<ArticleRow>({
+  async search(query, limit, context) {
+    const tenantId = String(context.request.filters?.tenantId ?? 'public');
+    return db.query<ArticleRow>(
+      `
+      SELECT id, title, content, source,
+             ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
+      FROM docs
+      WHERE tenant_id = $2
+        AND search_vector @@ plainto_tsquery('english', $1)
+      ORDER BY rank DESC
+      LIMIT $3
+      `,
+      [query, tenantId, limit],
+    );
   },
-
-  // 2. Fetch documents from your own database
-  retriever: createFulltextRetriever({
-    async search(query, limit) {
-      return db.query("SELECT id, content FROM docs WHERE text @@ to_tsquery($1) LIMIT $2", [query, limit]);
-    },
-    toDocument: (row) => ({ id: row.id, content: row.content })
+  toDocument: (row) => ({
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    source: row.source,
+    score: row.rank,
   }),
+  primaryQueryBoost: 2,
+});
 
-  // 3. (Optional) Synthesize an LLM answer
+const vectorRetriever = createVectorRetriever<ArticleRow>({
+  async search(embeddings, limit, context) {
+    const tenantId = String(context.request.filters?.tenantId ?? 'public');
+    return db.query<ArticleRow>(
+      `
+      SELECT id, title, content, source,
+             1 - (embedding <=> $1::vector) AS similarity
+      FROM docs
+      WHERE tenant_id = $2
+      ORDER BY embedding <=> $1::vector
+      LIMIT $3
+      `,
+      [`[${embeddings.join(',')}]`, tenantId, limit],
+    );
+  },
+  toDocument: (row) => ({
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    source: row.source,
+    score: row.similarity,
+  }),
+});
+
+const client = createPostgresSearchClient({
+  fulltextRetriever,
+  vectorRetriever,
+  embedder: {
+    async embed(input) {
+      const res = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input,
+      });
+      return res.data[0]?.embedding ?? [];
+    },
+  },
   synthesizer: {
     async synthesize(context) {
-      const text = context.results.map(r => r.content).join("\n");
-      const res = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [{ role: "system", content: `Context: ${text}` }, { role: "user", content: context.plan.normalizedQuery }]
+      const citations = context.results
+        .slice(0, 4)
+        .map((doc, i) => `[${i + 1}] ${doc.title ?? doc.id}: ${doc.content}`)
+        .join('\n\n');
+
+      const chat = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Answer only with information from the provided citations.',
+          },
+          {
+            role: 'user',
+            content: `Question: ${context.plan.normalizedQuery}\n\n${citations}`,
+          },
+        ],
       });
-      return res.choices[0].message.content;
-    }
-  }
-});
-```
 
-### Multi-Query Expansion
-
-Swap the planner for `ExpandingQueryPlanner` to rewrite each search into multiple phrasings. Every built-in retriever fans out across the expanded queries — fulltext retrievers run one search per query, vector retrievers run one ANN search per query embedding — and the ranked lists are fused with RRF:
-
-```typescript
-import { ExpandingQueryPlanner, SearchClient } from "kolm-search";
-
-const client = new SearchClient({
-  planner: new ExpandingQueryPlanner({
-    async expand(query) {
-      // Bring your own expansion source: an LLM, synonym service, rewrite table, …
-      const res = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: `Rewrite this search query into 3 alternative phrasings, one per line, no numbering:\n${query}` }],
-      });
-      return res.choices[0].message.content?.split("\n") ?? [];
+      return chat.choices[0]?.message?.content;
     },
-  }),
-  embedder,   // in vector/hybrid mode, every expanded query is embedded
-  retriever,
+  },
+  defaultMode: 'hybrid',
+  defaultLimit: 8,
+  cacheTtlSeconds: 60,
+});
+
+const result = await client.search({
+  query: 'How do I enable query expansion?',
+  filters: { tenantId: 'acme-inc' },
 });
 ```
 
-Expander failures degrade gracefully to the primary query alone. On Cloudflare, pass `queryExpansion: true` to `createCloudflareSearchClient` to enable this with Workers AI.
+### Architecture Benefits
 
----
+- Fulltext retrieval captures exact terminology.
+- Vector retrieval captures semantic intent.
+- Reciprocal Rank Fusion combines results without manual score normalization.
+- Tenant isolation is enforced securely within the retriever layer using `context.request.filters`.
 
-## Features
+## Cloudflare Worker Edge API
 
-- **Hybrid Search:** Combine Fulltext (keyword) and Vector (semantic) search with [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf) for superior relevance.
-- **Smart Query Planning:** Multi-query expansion (via `ExpandingQueryPlanner`) and intent classification to understand what users *actually* want. Expanded queries flow through fulltext, vector, and hybrid retrieval alike.
-- **Production Orchestration:** Built-in parallel retrieval, response caching with TTLs, and deduplication.
-- **Framework Agnostic:** Runs anywhere (Node, Bun, Edge, Deno). No heavy dependencies.
-- **Observability:** Detailed stage-level telemetry (track duration and success per-stage).
-- **Schema Validation:** Native support for Zod, Valibot, and ArkType via Standard Schema.
+This configuration provides low-latency hybrid retrieval deployed on Cloudflare Workers.
 
----
+```ts
+import { createCloudflareSearchClient } from 'kolm-search/presets/cloudflare';
 
-## Architecture: The Headless Engine
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const q = url.searchParams.get('q') ?? '';
+    const tenant = url.searchParams.get('tenant') ?? 'public';
 
-`kolm-search` follows a modular port-and-adapter architecture. You provide the **adapters** (how to talk to your DB/LLM), and the library handles the **pipeline** (the logic of how a search should run).
+    const client = createCloudflareSearchClient(env, {
+      d1Table: 'docs_fts',
+      toDocument: (row) => ({
+        id: String(row.id),
+        title: String(row.title ?? ''),
+        content: String(row.content ?? ''),
+        source: String(row.url ?? ''),
+        score: Number(row.score ?? 0),
+      }),
+      queryExpansion: { maxQueries: 4 },
+      cacheTtlSeconds: 30,
+      defaultMode: 'hybrid',
+    });
 
-```text
-Request ──▶ [ Cache (hit?) ] ──▶ [ QueryPlanner ] ──▶ [ IntentClassifier ]
-                                                              │
-    ┌─────────────────────────────────────────────────────────┘
-    ▼
-[ Embedder ] ──▶ [ Retriever (Vector/Fulltext/Hybrid) ] ──▶ [ Deduplicator ]
-                                                              │
-    ┌─────────────────────────────────────────────────────────┘
-    ▼
-[ Reranker ] ──▶ [ Pagination ] ──▶ [ Synthesizer (LLM) ] ──▶ [ Cache (set) ] ──▶ SearchResponse
-```
+    const search = await client.search({
+      query: q,
+      filters: { tenantId: tenant },
+      limit: 10,
+    });
 
----
-
-## Advanced Configuration
-
-### Error Handling
-
-Two error types are thrown by the pipeline:
-
-- **`SearchError`** — a named pipeline stage failed (query validation, retrieval, embedding, etc.)
-- **`SchemaValidationError`** — input or output failed Standard Schema validation
-
-Identify exactly which stage failed using the `PIPELINE_STAGES` constants:
-
-```typescript
-import { SearchError, SchemaValidationError, PIPELINE_STAGES } from "kolm-search";
-
-try {
-  await client.search({ query: "..." });
-} catch (error) {
-  if (error instanceof SearchError && error.stage === PIPELINE_STAGES.EMBEDDER) {
-    console.error("The LLM embedding service is down.");
-  }
-  if (error instanceof SchemaValidationError) {
-    console.error("Validation failed on", error.target, error.issues);
-  }
-}
-```
-
-### Telemetry
-Monitor your search performance with millisecond precision per-stage.
-
-```typescript
-const telemetry: Telemetry = {
-  async track(event, payload) {
-    // event is always "search.completed"
-    // payload shape: { durationMs: number, mode: SearchMode, resultCount: number, stageDurations: Record<string, number> }
-    // stageDurations keys: "planner", "embedder", "retriever", "reranker", "synthesizer", "cache.get", "cache.set"
-    console.log(`Search completed in ${payload.durationMs}ms`, payload.stageDurations);
+    return Response.json(
+      {
+        answer: search.answer,
+        results: search.results.map((r) => ({
+          id: r.id,
+          title: r.title,
+          source: r.source,
+          score: r.score,
+        })),
+        durationMs: search.durationMs,
+      },
+      { headers: { 'content-type': 'application/json' } },
+    );
   },
 };
 ```
 
----
+### Architecture Components
+
+- **Embeddings & Synthesis:** Cloudflare Workers AI
+- **Vector Retrieval:** Cloudflare Vectorize
+- **Keyword Retrieval (Optional):** Cloudflare D1
+- **Caching (Optional):** Cloudflare KV
+
+## Express endpoint with telemetry and stage-aware errors
+
+```ts
+import express from 'express';
+import {
+  PIPELINE_STAGES,
+  SchemaValidationError,
+  SearchError,
+  SearchClient,
+} from 'kolm-search';
+
+const app = express();
+
+app.get('/api/search', async (req, res) => {
+  try {
+    const result = await client.search({
+      query: String(req.query.q ?? ''),
+      mode: 'hybrid',
+      limit: Number(req.query.limit ?? 10),
+      filters: { tenantId: req.header('x-tenant-id') ?? 'public' },
+      context: { requestId: req.header('x-request-id') ?? 'unknown' },
+    });
+
+    res.json(result);
+  } catch (error) {
+    if (error instanceof SchemaValidationError) {
+      res.status(400).json({
+        error: 'invalid_request',
+        target: error.target,
+        issues: error.issues,
+      });
+      return;
+    }
+
+    if (error instanceof SearchError) {
+      const status =
+        error.stage === PIPELINE_STAGES.CLIENT ||
+        error.stage === PIPELINE_STAGES.PLANNER
+          ? 400
+          : 502;
+
+      res.status(status).json({
+        error: 'search_failed',
+        stage: error.stage,
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+```
+
+## Common implementation patterns
+
+### 1) Per-request mode switching
+
+```ts
+await client.search({ query: 'pricing', mode: 'fulltext' });
+await client.search({ query: 'how do I rotate keys', mode: 'hybrid' });
+```
+
+### 2) Multi-tenant filtering
+
+Pass constraints via the `filters` property and enforce them in custom retrievers:
+
+```ts
+await client.search({
+  query: 'SOC 2 controls',
+  filters: { tenantId: 'acme-inc', visibility: 'public' },
+});
+```
+
+### 3) Query expansion with graceful fallback
+
+Utilize `ExpandingQueryPlanner` (or the Cloudflare preset `queryExpansion` option) to rewrite queries. If the expansion service fails, retrieval degrades gracefully to the primary query.
+
+## API behavior at a glance
+
+- `SearchClient` is the public entry point with input guardrails.
+- `planner` and `retriever` are required when constructing custom clients.
+- vector/hybrid mode requires an `embedder`.
+- all other pipeline stages are optional.
+- `SearchError.stage` tells you where failures happened.
+- `SchemaValidationError` is reserved for schema boundary violations.
+
+## Documentation
+
+- Guide: [Getting Started](docs/guide/getting-started.md)
+- Guide: [Architecture](docs/guide/architecture.md)
+- Guide: [Presets](docs/guide/presets.md)
+- Guide: [Examples](docs/guide/examples.md)
+- Reference: [Core API](docs/reference/core.md)
+- Reference: [Adapters](docs/reference/adapters.md)
+- Reference: [Contracts](docs/reference/contracts.md)
+- Reference: [Errors and Stages](docs/reference/errors.md)
 
 ## Contributing
 
-Contributions are welcome. Please open an issue before submitting a pull request for significant changes.
+Contributions are welcome. Open an issue before submitting a pull request for significant changes.
 
 ## License
 

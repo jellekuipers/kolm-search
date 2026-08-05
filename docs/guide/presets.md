@@ -152,3 +152,50 @@ const client = createPostgresSearchClient({
   },
 });
 ```
+
+## Configuration Recipes
+
+These examples show how to apply the most common preset-level configuration options.
+
+### Cache TTL and defaults
+
+```ts
+const client = createPostgresSearchClient({
+  fulltextRetriever,
+  defaultMode: "hybrid",
+  defaultLimit: 12,
+  cacheTtlSeconds: 120,
+});
+```
+
+### Guardrails for query size
+
+```ts
+const client = createBasicSearchClient(documents, {
+  maxQueryLength: 500,
+});
+```
+
+### Best-effort hybrid retrieval
+
+```ts
+const client = createPostgresSearchClient({
+  fulltextRetriever,
+  vectorRetriever,
+  embedder,
+  compositeStrategy: "best-effort",
+});
+```
+
+### Cloudflare query expansion toggle
+
+```ts
+const client = createCloudflareSearchClient(env, {
+  queryExpansion: { maxQueries: 4 },
+  d1Table: "docs_fts",
+  toDocument: (row) => ({
+    id: String(row.id),
+    content: String(row.content ?? ""),
+  }),
+});
+```

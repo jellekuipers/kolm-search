@@ -26,6 +26,17 @@ Fulltext retriever for development and testing. Scores documents by the fraction
 
 Returns up to `targetLimit × 2` candidates sorted by descending score. Throws `SearchError` when mode is `"vector"`. When `expandedQueries` has multiple entries, one ranked list is built per query and the lists are RRF-merged.
 
+Example:
+
+```ts
+import { InMemoryFulltextRetriever } from "kolm-search/adapters/in-memory";
+
+const retriever = new InMemoryFulltextRetriever([
+  { id: "1", title: "Setup", content: "Install and configure kolm-search" },
+  { id: "2", title: "Pricing", content: "Plans and billing details" },
+]);
+```
+
 ### `InMemoryVectorRetriever`
 
 Vector retriever using cosine similarity. Requires an `Embedder` in the pipeline so that `context.embeddings` is populated.
@@ -43,11 +54,34 @@ Vector retriever using cosine similarity. Requires an `Embedder` in the pipeline
 
 Returns up to `targetLimit × 2` candidates. Throws `SearchError` when `context.embeddings` is absent. When `context.expandedEmbeddings` has multiple vectors, one ranked list is built per vector and the lists are RRF-merged.
 
+Example:
+
+```ts
+import { InMemoryVectorRetriever } from "kolm-search/adapters/in-memory";
+
+const retriever = new InMemoryVectorRetriever([
+  {
+    document: { id: "1", content: "How to configure SSO" },
+    embedding: [0.12, -0.08, 0.44],
+  },
+]);
+```
+
 ### `InMemoryCache`
 
 In-process cache backed by a `Map`. Respects optional per-entry TTLs. Expired entries are evicted lazily on the next `get` call.
 
 No constructor parameters.
+
+Example:
+
+```ts
+import { InMemoryCache } from "kolm-search/adapters/in-memory";
+
+const cache = new InMemoryCache();
+await cache.set("search:key", { results: [] }, 30);
+const cached = await cache.get<{ results: unknown[] }>("search:key");
+```
 
 > **Note:** Data is not shared across processes or instances. For multi-instance deployments use `RedisCacheStore` or `KVCacheStore`.
 
@@ -118,6 +152,24 @@ The `context` parameter passed to `search` provides useful read-only fields:
 
 When `expandedQueries` has multiple entries, results from each query are merged via RRF. The `primaryQueryBoost` repeats the first query's ranked list for proportionally more RRF weight.
 
+Example:
+
+```ts
+const retriever = createFulltextRetriever({
+  async search(query, limit, context) {
+    const tenantId = String(context.request.filters?.tenantId ?? "public");
+    return db.searchFulltext(query, tenantId, limit);
+  },
+  toDocument: (row) => ({
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    score: row.rank,
+  }),
+  primaryQueryBoost: 2,
+});
+```
+
 ### `createVectorRetriever<TRow>(options)`
 
 Creates a `Retriever` backed by any vector-capable database.
@@ -133,6 +185,22 @@ The same `context` fields described above are available in the `search` callback
 Throws `SearchError` when `context.embeddings` is absent (no `Embedder` wired).
 
 When `context.expandedEmbeddings` has multiple vectors (multi-query expansion in vector/hybrid mode), `search` is called once per vector and the ranked lists are RRF-merged — mirroring `createFulltextRetriever`'s multi-query fan-out.
+
+Example:
+
+```ts
+const retriever = createVectorRetriever({
+  async search(embeddings, limit, context) {
+    const tenantId = String(context.request.filters?.tenantId ?? "public");
+    return db.searchVector(embeddings, tenantId, limit);
+  },
+  toDocument: (row) => ({
+    id: row.id,
+    content: row.content,
+    score: row.similarity,
+  }),
+});
+```
 
 ## Redis
 
@@ -155,6 +223,16 @@ Import path: `kolm-search/adapters/redis`
 | `set` | `(key: string, value: string) => Promise<unknown>` |
 | `del` | `(key: string) => Promise<unknown>` |
 
+Example:
+
+```ts
+import { RedisCacheStore } from "kolm-search/adapters/redis";
+import Redis from "ioredis";
+
+const redis = new Redis(process.env.REDIS_URL as string);
+const cache = new RedisCacheStore(redis);
+```
+
 ## Cloudflare
 
 Import path: `kolm-search/adapters/cloudflare`
@@ -176,6 +254,22 @@ Import path: `kolm-search/adapters/cloudflare`
 | `toDocument` | `(row: TRow & { score: number }) => SearchDocument` | Yes | Map a D1 row to a `SearchDocument`. The `score` field is a positive BM25 value (the adapter negates D1's native negative `rank`) |
 
 When `expandedQueries` has multiple entries, one `MATCH` query is issued per expanded query (in parallel) and the ranked lists are RRF-merged.
+
+Example:
+
+```ts
+import { D1FulltextRetriever } from "kolm-search/adapters/cloudflare";
+
+const retriever = new D1FulltextRetriever(env.D1_DATABASE, {
+  table: "docs_fts",
+  toDocument: (row) => ({
+    id: String(row.id),
+    title: String(row.title ?? ""),
+    content: String(row.content ?? ""),
+    score: Number(row.score),
+  }),
+});
+```
 
 ### `VectorizeRetriever`
 
@@ -200,6 +294,17 @@ Requests `topK = max(targetLimit × 2, 20)` with `returnMetadata: true`. Metadat
 
 Implements `embedMany` — the Workers AI embedding endpoint accepts an array of texts natively, so all expanded queries are embedded in a single call.
 
+Example:
+
+```ts
+import { WorkersAIEmbedder } from "kolm-search/adapters/cloudflare";
+
+const embedder = new WorkersAIEmbedder(
+  env.AI,
+  "@cf/baai/bge-base-en-v1.5",
+);
+```
+
 ### `WorkersAIQueryExpander`
 
 `QueryExpander` backed by a Cloudflare Workers AI chat-completion model. Pair with `ExpandingQueryPlanner` (see [core reference](/reference/core#expandingqueryplanner)) to enable multi-query retrieval.
@@ -218,6 +323,22 @@ Implements `embedMany` — the Workers AI embedding endpoint accepts an array of
 
 The model is asked for newline-separated phrasings; output is parsed defensively (list markers and quotes stripped, empty lines dropped). Imperfect model output degrades to fewer expansions rather than failures.
 
+Example:
+
+```ts
+import {
+  WorkersAIQueryExpander,
+} from "kolm-search/adapters/cloudflare";
+import { ExpandingQueryPlanner } from "kolm-search";
+
+const planner = new ExpandingQueryPlanner(
+  new WorkersAIQueryExpander(env.AI, "@cf/meta/llama-3.1-8b-instruct", {
+    maxExpansions: 3,
+  }),
+  { maxQueries: 4 },
+);
+```
+
 ### `WorkersAISynthesizer`
 
 `Synthesizer` backed by a Cloudflare Workers AI chat-completion model. Returns `undefined` when the result set is empty.
@@ -234,6 +355,22 @@ The model is asked for newline-separated phrasings; output is parsed defensively
 | --- | --- | --- | --- |
 | `promptBuilder` | `(context: SearchPipelineContext) => string` | No | Custom function to build the LLM prompt from pipeline context. The default prompt includes the query and up to 5 result snippets |
 
+Example:
+
+```ts
+import { WorkersAISynthesizer } from "kolm-search/adapters/cloudflare";
+
+const synthesizer = new WorkersAISynthesizer(env.AI, undefined, {
+  promptBuilder: (context) => {
+    const snippets = context.results
+      .slice(0, 3)
+      .map((doc) => `- ${doc.title ?? doc.id}: ${doc.content}`)
+      .join("\n");
+    return `Question: ${context.plan.normalizedQuery}\n\nContext:\n${snippets}`;
+  },
+});
+```
+
 ### `KVCacheStore`
 
 `CacheStore` backed by a Cloudflare KV namespace binding. Values are JSON-serialised.
@@ -243,3 +380,12 @@ The model is asked for newline-separated phrasings; output is parsed defensively
 | `kv` | KV namespace binding | The KV namespace from `env` |
 
 `expirationTtl` is forwarded directly to the KV `put` call. KV has a minimum TTL of 60 seconds — setting `cacheTtlSeconds` below 60 in `SearchPipelineOptions` will be silently overridden by KV.
+
+Example:
+
+```ts
+import { KVCacheStore } from "kolm-search/adapters/cloudflare";
+
+const cache = new KVCacheStore(env.SEARCH_CACHE);
+await cache.set("search:key", { results: [] }, 120);
+```

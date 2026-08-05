@@ -37,6 +37,36 @@ Guards:
 
 The request type supports `filters?: Record<string, JsonValue>` and `context?: Record<string, JsonValue>`. Use this as the default integration surface. Prefer constructing via preset factories.
 
+Example:
+
+```ts
+import { SearchClient, DefaultQueryPlanner } from "kolm-search";
+import { createFulltextRetriever } from "kolm-search/adapters/generic";
+
+const client = new SearchClient(
+  {
+    planner: new DefaultQueryPlanner(),
+    retriever: createFulltextRetriever({
+      async search(query, limit) {
+        return db.searchDocs(query, limit);
+      },
+      toDocument: (row) => ({ id: row.id, content: row.content }),
+    }),
+  },
+  {
+    defaultMode: "fulltext",
+    defaultLimit: 10,
+    maxQueryLength: 500,
+  },
+);
+
+const response = await client.search({
+  query: "billing portal",
+  filters: { tenantId: "acme" },
+  context: { requestId: "req_123" },
+});
+```
+
 ## `SearchPipeline`
 
 Lower-level execution engine. Wires together: planning → intent classification → embedding → retrieval → deduplication → reranking → pagination → synthesis, with optional caching and telemetry.
@@ -47,6 +77,27 @@ Lower-level execution engine. Wires together: planning → intent classification
 | `options` | `SearchPipelineOptions` | No | Pipeline configuration |
 
 Use when you need custom control over stage wiring or execution behavior. Prefer `SearchClient` for most use cases — it adds input validation on top.
+
+Example:
+
+```ts
+import { SearchPipeline, DefaultQueryPlanner } from "kolm-search";
+
+const pipeline = new SearchPipeline(
+  {
+    planner: new DefaultQueryPlanner(),
+    retriever,
+    cache,
+    telemetry,
+  },
+  {
+    defaultMode: "hybrid",
+    cacheTtlSeconds: 90,
+  },
+);
+
+const response = await pipeline.search({ query: "sso setup", limit: 8 });
+```
 
 ## `CompositeRetriever`
 
@@ -69,6 +120,19 @@ Strategies:
 - **`"fail-fast"`** — any retriever failure immediately rejects the whole `retrieve` call (`Promise.all`)
 - **`"best-effort"`** — failed retrievers are logged and skipped; fusion proceeds with surviving results. Throws `SearchError` only when all retrievers fail
 
+Example:
+
+```ts
+const retriever = new CompositeRetriever(
+  [fulltextRetriever, vectorRetriever],
+  {
+    strategy: "best-effort",
+    k: 60,
+    logger,
+  },
+);
+```
+
 ## `DefaultQueryPlanner`
 
 Minimal stateless `QueryPlanner` with no constructor parameters.
@@ -79,6 +143,16 @@ Normalisation steps:
 3. Collapse consecutive whitespace to a single space
 
 Sets `expandedQueries` to `[normalizedQuery]`. No synonym expansion, spell-checking, or term splitting — use `ExpandingQueryPlanner` for multi-query expansion, or substitute a custom `QueryPlanner`.
+
+Example:
+
+```ts
+const planner = new DefaultQueryPlanner();
+const plan = await planner.plan({ query: "  How   To  INSTALL  " });
+
+// plan.normalizedQuery === "how to install"
+// plan.expandedQueries === ["how to install"]
+```
 
 ## `ExpandingQueryPlanner`
 
@@ -116,6 +190,21 @@ const client = new SearchClient({ planner, retriever, embedder });
 ```
 
 In `"vector"` and `"hybrid"` mode the pipeline embeds every expanded query (using `Embedder.embedMany` when implemented, otherwise parallel `embed` calls) and exposes the vectors as `context.expandedEmbeddings` for vector retrievers.
+
+Example with options:
+
+```ts
+const planner = new ExpandingQueryPlanner(expander, {
+  maxQueries: 5,
+  logger,
+});
+
+const client = new SearchClient({
+  planner,
+  retriever,
+  embedder,
+});
+```
 
 ## `PIPELINE_STAGES`
 
@@ -167,6 +256,13 @@ Computes the RRF score for a single document at a given rank.
 
 Returns a score in the range `(0, 1]`. Higher is better.
 
+Example:
+
+```ts
+const topScore = rrfScore(0); // 1 / 61
+const lowerScore = rrfScore(10); // 1 / 71
+```
+
 ## `mergeWithRrf(rankedLists, docMap, limit, k?)`
 
 Merge multiple ranked result lists into a single deduplicated list using RRF.
@@ -179,3 +275,19 @@ Merge multiple ranked result lists into a single deduplicated list using RRF.
 | `k` | `number` | `60` | RRF smoothing constant |
 
 Returns merged documents ordered by descending RRF score, each carrying the fused `score`.
+
+Example:
+
+```ts
+const fulltext = [
+  { id: "a", content: "..." },
+  { id: "b", content: "..." },
+];
+const vector = [
+  { id: "b", content: "..." },
+  { id: "c", content: "..." },
+];
+
+const merged = mergeWithRrf([fulltext, vector], new Map(), 3);
+// merged[0] is usually "b" because it appears high in both lists
+```
