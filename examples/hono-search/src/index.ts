@@ -149,7 +149,7 @@ app.post('/search', zValidator('json', searchBodySchema), async (c) => {
 // Server
 // ---------------------------------------------------------------------------
 
-const PORT = Number(3000);
+const PORT = Number(process.env.PORT ?? 3000);
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(
