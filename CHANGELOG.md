@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-08-05
+
+### Fixed
+
+- Hono example type checking by enabling Node type globals in `examples/hono-search/tsconfig.json`.
+- CI compatibility with `pnpm@11.20.0` by removing Node.js 20 from the CI matrix.
+
+### Changed
+
+- Expanded and clarified project documentation and README examples, including dedicated examples guidance and improved API reference coverage.
+
 ## [1.1.0] - 2026-07-17
 
 ### Added
